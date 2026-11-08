@@ -1,0 +1,69 @@
+# GRPO on recipe-classify, Qwen3.5-2B, single H200 (trainer + vLLM share GPU 0).
+# Launch from ~/prime-rl on the pod:
+#   uv run rl @ ~/prime-intellect/env/environments/recipe_classify/configs/rl-2b.toml \
+#     --trainer-gpu-ids 0 --inference-gpu-ids 0 --inference.gpu-memory-utilization 0.45
+# Arm C = model below. Arm D = swap [model].name for the SFT checkpoint path.
+mode = "rl"
+max_steps = 120
+seq_len = 4096                              # ~3.2k prompt + 400 completion
+
+[model]
+name = "Qwen/Qwen3.5-2B"
+
+[monitors.wandb]
+project = "recipe-classify"
+name = "2b-grpo-from-base-v2"
+
+[orchestrator]
+batch_size = 128                            # EPISODES per step (= 16 prompts × group 8). Was 64 = 8 prompts: too noisy a gradient.
+max_staleness = 2                           # Was default 8. Single-GPU inference runs ~10× ahead of the trainer; stale rollouts drove
+                                            # mismatch-KL 0.002→0.39 and the collapse at step ~35. Keep rollouts near-on-policy.
+
+[orchestrator.train]
+group_size = 8                              # rollouts per prompt; advantage = within-group
+
+[orchestrator.train.sampling]
+max_completion_tokens = 400
+temperature = 1.0
+
+[[orchestrator.train.source]]
+name = "recipe-classify-train"
+env.taskset.id = "recipe-classify"
+env.taskset.dataset_path = "/home/ubuntu/prime-intellect/data/dataset/train.jsonl"   # NOT the default (eval.jsonl = gold)
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"
+
+# Reward-vs-GOLD every 10 steps: the RL analogue of SFT's val loss. Default dataset_path = eval.jsonl.
+[orchestrator.eval]
+interval = 10
+
+[orchestrator.eval.sampling]
+max_completion_tokens = 400
+temperature = 0.7                           # matches vf-run evals so numbers are comparable
+
+[[orchestrator.eval.source]]
+name = "recipe-classify-gold"
+select.limit = 150
+env.taskset.id = "recipe-classify"
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"
+
+[trainer.optim]
+lr = 1e-6                                   # full fine-tune of a 2B; halve if KL runs away
+
+[ckpt]
+interval = 20
+
+[inference]
+
+# Single-GPU: trainer and vLLM share GPU 0, and NCCL refuses a communicator with two ranks on one device
+# ("NCCL error: invalid usage"). Ship weights through the filesystem instead (a few seconds per step for a 2B).
+[weight_broadcast]
+type = "filesystem"
+
+# Explicit, not auto: the renderer's per-model default table has thinking OFF for Qwen3.5-0.8B/2B but ON for 4B+,
+# and ON for any name it doesn't recognise — i.e. every local SFT checkpoint path. Thinking must be off or every
+# rollout spends its 400 tokens inside <think> and the whole group scores 0 (no advantage, no gradient).
+[orchestrator.renderer]
+name = "qwen3.5"
+enable_thinking = false

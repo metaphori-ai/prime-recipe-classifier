@@ -1,0 +1,26 @@
+# SFT on the silver set with prime-rl (full fine-tune, not LoRA), Qwen3.5-2B, one GPU.
+#   uv run sft @ ~/prime-intellect/env/environments/recipe_classify/configs/sft-2b.toml
+# No in-loop eval (keeps the GPU to the trainer); evaluate the checkpoint afterwards with eval-gold.toml.
+# 3,090 examples / batch 32 ≈ 97 steps per epoch → 200 steps ≈ 2 epochs (matches the MLX run).
+mode = "sft"
+max_steps = 200
+
+[ckpt]
+
+[model]
+name = "Qwen/Qwen3.5-2B"
+
+[data]
+name = "/home/ubuntu/prime-intellect/data/sft"     # local dir: train.jsonl + valid.jsonl, `messages` column
+seq_len = 4096
+batch_size = 32
+
+[optim]
+lr = 1e-5                                           # full FT of a 2B; the 0.6B example uses 2e-5
+
+[monitors.wandb]
+project = "recipe-classify"
+name = "2b-sft-primerl"
+
+[deployment]
+num_train_gpus = 1

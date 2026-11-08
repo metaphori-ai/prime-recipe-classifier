@@ -1,0 +1,17 @@
+# recipe-classify against a LOCAL Ollama model (zero cost). Ollama ignores the API key but the
+# client requires an env var name that is set; run via scripts/vf_run_ollama.sh which exports it.
+#   bash ../scripts/vf_run_ollama.sh qwen3.5:2b 50
+[env.agent.harness]
+id = "null"
+
+[env.agent.runtime]
+type = "subprocess"
+
+[client]
+base_url = "http://localhost:11434/v1"
+api_key_var = "OLLAMA_API_KEY"
+
+[sampling]
+temperature = 0.7
+max_tokens = 400
+reasoning_effort = "none"   # qwen3.5 thinks by default; thinking lands in `reasoning`, content stays empty, and 400 tokens burn with no <answer>. Disable for the baseline.

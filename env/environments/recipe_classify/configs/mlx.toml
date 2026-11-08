@@ -1,0 +1,18 @@
+# recipe-classify against a LOCAL mlx_lm.server (fused SFT weights). Same sampling as ollama.toml so
+# the SFT arm is comparable to the base arm. Start the server first:
+#   mlx_lm.server --model runs/sft-2b-fused --port 8080
+# then, from env/:  bash ../scripts/vf_run_mlx.sh runs/sft-2b-fused 439
+[env.agent.harness]
+id = "null"
+
+[env.agent.runtime]
+type = "subprocess"
+
+[client]
+base_url = "http://127.0.0.1:8080/v1"
+api_key_var = "MLX_API_KEY"
+
+[sampling]
+temperature = 0.7
+max_tokens = 400
+reasoning_effort = "none"   # qwen3.5 thinks by default; thinking lands in `reasoning`, content stays empty, and 400 tokens burn with no <answer>. Disable for the baseline.

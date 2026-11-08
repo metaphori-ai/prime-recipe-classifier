@@ -1,0 +1,31 @@
+{
+ "eval": 439,
+ "train": 3252,
+ "skipped": {
+  "no origin silver": 2628,
+  "gold id": 439,
+  "jev: incomplete": 493,
+  "content-duplicate of gold": 4
+ },
+ "origin_silver": {
+  "teachers": 2,
+  "files": [
+   "origin_silver_dsv4.jsonl",
+   "origin_silver_qwen36.jsonl"
+  ],
+  "common": 7375,
+  "agreed": 4737,
+  "agreement_rate": 0.642
+ },
+ "cap_primary": 300,
+ "capped_dropped": {
+  "North American/American": 888
+ },
+ "publishable_train": 2880,
+ "publishable_eval": 350,
+ "sources": {
+  "foodcom": 1495,
+  "ss": 461,
+  "wikibooks": 1735
+ }
+}

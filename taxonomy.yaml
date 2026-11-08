@@ -1,0 +1,406 @@
+# SaffronSifu recipe classification taxonomy — v0.3
+# Controlled vocabulary for the verifiers environment AND the app's own tagging.
+#
+# PRINCIPLE: store the most specific POSITIVE fact; derive coarser satisfactions by lattice.
+#
+# Rules:
+#   - Every emitted origin path MUST exist in this file (verifier gate).
+#   - The origin spine is CULINARY TRADITION, not political geography. Countries are metadata
+#     on nodes; "Indian", "Pakistani", "South Asian" are DERIVED satisfactions, never emitted.
+#   - One parent per node, chosen by culinary convention and documented here. Gold labelers
+#     follow the file, not instinct — gold agreement is the ceiling on reward.
+#   - Named diaspora/fusion traditions (Anglo-Indian, Nikkei, Tex-Mex, Indo-Chinese, American Chinese …) are
+#     nodes, filed under the HOST tradition (whose table they are eaten at), with the source culture in `c`.
+#     Un-named fusion (gochujang ribs) uses the primary/influence roles instead.
+#   - Depth is variable: macro > tradition [> macro-region] > region. The macro-region tier
+#     exists only where it carries real information (Indian, Chinese, Italian, Mexican, American).
+#   - "unknown" is a legal origin. `contains` may include "incomplete".
+#   - Register (home / street / court / temple / diaspora / restaurant) is a SEPARATE facet,
+#     deferred. Do not encode it as origin nodes.
+#
+# Node syntax:
+#   Name:                      # leaf, inherits country metadata from parent
+#   Name: {c: [Country, ...]}  # leaf with its own country metadata
+#   Name:                      # branch
+#     _c: [Country, ...]       # country metadata for this branch; children inherit unless overridden
+#     Child: ...
+
+version: 0.3.3  # + named diaspora nodes (Anglo-Indian, Indo-Chinese, American Chinese, Italian-American); host-table convention
+
+origin:
+  South Asian:
+    Indian:                     # pan-Indian / restaurant idiom with no regional identity
+      _c: [India]
+      North Indian:             # optional macro-region tier
+        Awadhi:
+        Kashmiri:
+        Rajasthani:
+        Mughlai:
+      South Indian:
+        Tamil:
+        Kerala:
+        Chettinad:
+        Mangalorean:
+        Andhra:
+      Deccan:                   # convention: Hyderabadi filed under Deccan, not South
+        Hyderabadi:
+      West Indian:
+        Gujarati:
+        Maharashtrian:
+        Goan:
+      East Indian:
+        West Bengali:
+      Indo-Chinese: {c: [India]}    # named fusion tradition practiced in India: manchurian, chilli chicken, hakka noodles, schezwan
+    Punjabi:                    # cross-border; sibling of Indian & Pakistani, not child of either
+      _c: [India, Pakistan]
+      Amritsari: {c: [India]}
+      Lahori: {c: [Pakistan]}
+    Bengali:                    # cross-border; West Bengali above is the India-side sub-tradition
+      _c: [India, Bangladesh]
+      Bangladeshi: {c: [Bangladesh]}
+    Pakistani:
+      _c: [Pakistan]
+      Sindhi:
+      Karachi:
+    Sri Lankan: {c: [Sri Lanka]}
+    Nepali: {c: [Nepal]}
+    Afghan: {c: [Afghanistan]}
+
+  East Asian:
+    Chinese:
+      _c: [China]
+      Northern Chinese:
+        Beijing:
+        Dongbei:
+        Xinjiang:
+      Southern Chinese:
+        Cantonese: {c: [China, Hong Kong]}
+        Hakka:
+        Fujian:
+      Western Chinese:
+        Sichuan:
+        Hunan:
+        Yunnan:
+      Eastern Chinese:
+        Shanghai:
+        Jiangsu:
+      Taiwanese: {c: [Taiwan]}
+    Japanese:
+      _c: [Japan]
+      Kansai:
+      Kanto:
+      Okinawan:
+      Hokkaido:
+    Korean:
+      _c: [Korea]
+      Jeolla:
+      Gyeongsang:
+      Jeju:
+
+  Southeast Asian:
+    Thai:
+      _c: [Thailand]
+      Isan:
+      Northern Thai:
+      Central Thai:
+      Southern Thai:
+    Vietnamese:
+      _c: [Vietnam]
+      Northern Vietnamese:
+      Central Vietnamese:
+      Southern Vietnamese:
+    Indonesian:
+      _c: [Indonesia]
+      Javanese:
+      Padang:
+      Balinese:
+    Malay: {c: [Malaysia, Singapore]}      # cross-border
+    Nyonya: {c: [Malaysia, Singapore]}     # Peranakan; cross-border
+    Filipino:
+      _c: [Philippines]
+      Bicolano:
+      Ilocano:
+      Kapampangan:
+
+  West Asian & Caucasus:
+    Levantine:                  # cross-border by definition
+      _c: [Lebanon, Syria, Palestine, Jordan]
+      Lebanese: {c: [Lebanon]}
+      Syrian: {c: [Syria]}
+      Palestinian: {c: [Palestine]}
+    Turkish:
+      _c: [Turkey]
+      Gaziantep:
+      Aegean Turkish:
+      Black Sea Turkish:
+    Persian:
+      _c: [Iran]
+      Gilaki:
+      Shirazi:
+    Kurdish: {c: [Turkey, Iraq, Iran, Syria]}   # cross-border
+    Israeli: {c: [Israel]}
+    Georgian: {c: [Georgia]}
+    Armenian: {c: [Armenia]}
+    Gulf Arab: {c: [Saudi Arabia, UAE, Kuwait, Qatar, Oman, Bahrain]}
+    Iraqi: {c: [Iraq]}
+    Yemeni: {c: [Yemen]}
+
+  Central Asian:
+    Uzbek: {c: [Uzbekistan]}
+    Uyghur: {c: [China]}         # tradition is Central Asian; country is China. Spine wins.
+
+  North African:
+    Moroccan:
+      _c: [Morocco]
+      Fassi:
+      Marrakshi:
+    Tunisian: {c: [Tunisia]}
+    Algerian: {c: [Algeria]}
+    Egyptian: {c: [Egypt]}
+    Libyan: {c: [Libya]}
+
+  Sub-Saharan African:
+    Ethiopian & Eritrean: {c: [Ethiopia, Eritrea]}   # cross-border
+    West African:
+      _c: [Nigeria, Ghana, Senegal, Mali, Ivory Coast]
+      Nigerian:
+        _c: [Nigeria]
+        Yoruba:
+        Igbo:
+        Hausa:
+      Ghanaian: {c: [Ghana]}
+      Senegalese: {c: [Senegal]}
+    Swahili Coast: {c: [Kenya, Tanzania, Zanzibar]}  # cross-border
+    Southern African:
+      _c: [South Africa]
+      Cape Malay:
+      Durban Indian:
+
+  European:
+    Italian:
+      _c: [Italy]
+      Northern Italian:
+        Piedmontese:
+        Lombard:
+        Venetian:
+        Ligurian:
+        Emilian:
+      Central Italian:
+        Tuscan:
+        Roman:
+        Umbrian:
+      Southern Italian:
+        Neapolitan:
+        Pugliese:
+        Calabrian:
+        Sicilian:
+        Sardinian:
+    French:
+      _c: [France]
+      Provençal:
+      Lyonnais:
+      Norman:
+      Breton:
+      Alsatian:
+      Burgundian:
+      Southwest French:
+    Spanish:
+      _c: [Spain]
+      Catalan:
+      Andalusian:
+      Galician:
+      Valencian:
+      Asturian:
+    Basque: {c: [Spain, France]}             # cross-border; sibling of Spanish & French
+    Portuguese:
+      _c: [Portugal]
+      Alentejano:
+      Azorean:
+    Greek:
+      _c: [Greece]
+      Cretan:
+    German:
+      _c: [Germany]
+      Bavarian:
+      Swabian:
+    Austrian: {c: [Austria]}
+    Swiss: {c: [Switzerland]}
+    British:
+      _c: [United Kingdom]
+      English:
+      Scottish:
+      Welsh:
+      Anglo-Indian: {c: [United Kingdom, India]}   # named diaspora tradition: kedgeree, mulligatawny, coronation chicken; includes British curry-house dishes (tikka masala, balti) for now
+    Irish: {c: [Ireland]}
+    Dutch: {c: [Netherlands]}
+    Belgian: {c: [Belgium]}
+    Nordic:
+      _c: [Sweden, Norway, Denmark, Finland, Iceland]
+      Swedish: {c: [Sweden]}
+      Norwegian: {c: [Norway]}
+      Danish: {c: [Denmark]}
+      Finnish: {c: [Finland]}
+    Polish: {c: [Poland]}
+    Hungarian: {c: [Hungary]}
+    Czech: {c: [Czech Republic]}
+    Russian: {c: [Russia]}
+    Ukrainian: {c: [Ukraine]}
+    Balkan:
+      _c: [Serbia, Croatia, Bosnia, Bulgaria, Romania, North Macedonia, Albania]
+      Serbian: {c: [Serbia]}
+      Croatian: {c: [Croatia]}
+      Bulgarian: {c: [Bulgaria]}
+      Romanian: {c: [Romania]}
+    Ashkenazi Jewish: {c: []}                # diasporic; no country metadata by design
+    Sephardic Jewish: {c: []}
+
+  North American:
+    American:
+      _c: [USA]
+      Southern US:
+        Lowcountry:
+        Appalachian:
+        Soul Food:
+        Cajun:
+        Creole:
+      Tex-Mex: {c: [USA, Mexico]}
+      American Chinese: {c: [USA, China]}      # named diaspora tradition: General Tso's, orange chicken, chop suey, crab rangoon
+      Italian-American: {c: [USA, Italy]}      # named diaspora tradition: chicken parm, spaghetti & meatballs, fettuccine alfredo, baked ziti
+      New England:
+      Midwestern:
+      Pacific Northwest:
+      Californian:
+      Hawaiian:
+      Southwestern:
+    Canadian:
+      _c: [Canada]
+      Québécois:
+
+  Latin American & Caribbean:
+    Mexican:
+      _c: [Mexico]
+      Oaxacan:
+      Yucatecan:
+      Poblano:
+      Jalisciense:
+      Baja:
+      Veracruzano:
+      Northern Mexican:
+    Central American: {c: [Guatemala, El Salvador, Honduras, Nicaragua, Costa Rica, Panama]}
+    Caribbean:
+      _c: [Jamaica, Cuba, Puerto Rico, Trinidad and Tobago, Haiti, Dominican Republic]
+      Jamaican: {c: [Jamaica]}
+      Cuban: {c: [Cuba]}
+      Puerto Rican: {c: [Puerto Rico]}
+      Trinidadian: {c: [Trinidad and Tobago]}
+      Haitian: {c: [Haiti]}
+    Peruvian:
+      _c: [Peru]
+      Limeño:
+      Andean:
+      Nikkei:                   # named fusion tradition; no influence tag needed
+      Chifa:                    # named fusion tradition
+    Brazilian:
+      _c: [Brazil]
+      Bahian:
+      Mineiro:
+    Argentine: {c: [Argentina]}
+    Colombian: {c: [Colombia]}
+    Venezuelan: {c: [Venezuela]}
+    Chilean: {c: [Chile]}
+
+  Oceanian:
+    Australian: {c: [Australia]}
+    New Zealand: {c: [New Zealand]}
+    Polynesian: {c: [Samoa, Tonga, Fiji]}
+
+  Unplaced:                     # not a tradition; two honest reasons a dish has no origin
+    _c: []
+    Foundational:               # building blocks every tradition shares: plain rice, stock, boiled eggs,
+                                #   roasted vegetables, simple dressed greens. Mostly a dish-type signal.
+    Contemporary:               # modern cooking with no identifiable parent: grain bowls, smoothie bowls,
+                                #   "meal prep", internet-era dishes. A real category, not a failure.
+    # Reward note: neither shares ancestry with any real tradition, so predicting them for a dish with a
+    # recoverable origin scores 0 — a wrong guess in the right neighborhood already beats them.
+    # Watch their emission rate in trajectories; do not add an extra penalty (pushes toward confabulation).
+
+# ---------------------------------------------------------------------------
+# Deferred facets (NOT in env #1): dish_type, course, main_ingredient, technique, occasion,
+# register (home / street / court / temple / diaspora / restaurant).
+# ---------------------------------------------------------------------------
+
+contains:
+  # POSITIVE SPACE. Multi-valued. Each value is a claim that an ingredient of this class
+  # is PRESENT, verifiable by pointing at a line in the ingredient list.
+  # The model never emits "X-free"; absence is DERIVED downstream from this set.
+  # Safety asymmetry (positive space): a MISSED class (false negative) is the dangerous
+  # error, because the derived "X-free" filter will be wrong. Penalize recall failures hard.
+  # Legal extra value: "incomplete" — model believes the ingredient list is not fully resolvable.
+  # Animal-derived (drive dietary_pattern derivation)
+  - red_meat          # beef, lamb, pork, goat, venison
+  - pork              # subset of red_meat; kept separate for halal/kosher derivation
+  - beef              # subset of red_meat; kept separate for Hindu-dietary derivation
+  - poultry
+  - fish
+  - shellfish
+  - egg
+  - dairy
+  - honey
+  - gelatin           # derived from animal; vegan-relevant, often hidden
+  - blood             # blood sausage, dinuguan, blood tofu; halal/kosher-relevant
+  # Allergen / restriction classes
+  - gluten
+  - tree_nuts
+  - peanuts
+  - soy
+  - sesame
+  - alcohol
+  - mustard
+  - celery
+  # Meta
+  - incomplete
+
+derived:
+  # NEGATIVE SPACE. Never emitted by the model; computed from `contains` at query time.
+  # If "incomplete" ∈ contains, every derived value is "unknown".
+  dietary_pattern:   # most restrictive that holds; lattice: vegan ⊂ vegetarian ⊂ pescatarian ⊂ omnivore
+    vegan: "contains ∩ {red_meat, pork, beef, poultry, fish, shellfish, egg, dairy, honey, gelatin, blood} = ∅"
+    vegetarian: "contains ∩ {red_meat, pork, beef, poultry, fish, shellfish, gelatin, blood} = ∅"
+    pescatarian: "contains ∩ {red_meat, pork, beef, poultry, gelatin, blood} = ∅"
+    omnivore: "otherwise"
+  restrictions:      # each is "satisfies filter X-free"
+    gluten-free: "gluten ∉ contains"
+    dairy-free: "dairy ∉ contains"
+    egg-free: "egg ∉ contains"
+    nut-free: "tree_nuts ∉ contains"
+    peanut-free: "peanuts ∉ contains"
+    soy-free: "soy ∉ contains"
+    shellfish-free: "shellfish ∉ contains"
+    fish-free: "fish ∉ contains"
+    sesame-free: "sesame ∉ contains"
+    alcohol-free: "alcohol ∉ contains"
+    pork-free: "pork ∉ contains"
+    beef-free: "beef ∉ contains"
+    halal-ingredient-compatible: "{pork, blood, alcohol, gelatin} ∩ contains = ∅"   # ingredient-level: categorical exclusions only; zabiha slaughter not verifiable from text
+    kosher-ingredient-compatible: "{pork, shellfish, blood, gelatin, alcohol} ∩ contains = ∅ AND NOT (dairy ∈ contains AND {red_meat, poultry} ∩ contains ≠ ∅)"   # ingredient-level: species + meat/dairy combination; slaughter, rennet, equipment not verifiable. Known gap: fish class does not separate finned/scaled from eel, catfish, squid
+  umbrellas:         # coarse derived tags for fast search and agent restriction; never emitted
+    contains_meat:     "{red_meat, pork, beef, poultry} ∩ contains ≠ ∅"
+    contains_seafood:  "{fish, shellfish} ∩ contains ≠ ∅"
+    contains_animal:   "{red_meat, pork, beef, poultry, fish, shellfish, egg, dairy, honey, gelatin, blood} ∩ contains ≠ ∅"
+    plant_based:       "NOT contains_animal"      # synonym of vegan at the ingredient level
+  origin_satisfies:  # walk up the tree: a dish tagged Asia>India>Hyderabadi satisfies "Indian" and "Asian"
+    rule: "every ancestor of every emitted origin path"
+
+# Facets deferred to env #2+: dish_type, course, main_ingredient, technique, occasion.
+
+ingredient_traps:
+  # Known cases where the surface word misleads a naive rule. Used by the verifier
+  # AND as seeds for the hard slice of the eval set.
+  gluten:   [soy sauce, seitan, malt vinegar, beer, couscous, bulgur, farro, semolina, panko, worcestershire]
+  dairy:    [ghee, paneer, whey, casein, butter, cream, buttermilk, condensed milk, some margarines]
+  nuts:     [marzipan, pesto, praline, nutella, satay sauce, mole, romesco, dukkah]
+  soy:      [miso, tempeh, edamame, tamari, natto, some vegetable oil blends]
+  fish:     [fish sauce, worcestershire, dashi, oyster sauce, anchovy paste, caesar dressing, kimchi (often), nam prik]
+  egg:      [mayonnaise, aioli, hollandaise, many fresh pastas, meringue]
+  alcohol:  [mirin, shaoxing wine, cooking wine, marsala, kirsch, beer batter, sake, rum, brandy, liqueur]   # NOT flavor extracts (vanilla etc.): negligible quantity by policy
+  not_meat: [coconut milk, peanut butter, almond butter, eggplant, jackfruit, mushroom "steak"]

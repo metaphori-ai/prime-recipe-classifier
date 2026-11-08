@@ -1,0 +1,19 @@
+# Evaluate any checkpoint on ALL 439 gold against a local vLLM server on the pod:
+#   uv run inference --vllm.model <path-or-hf-id> --gpu-memory-utilization 0.6 &
+#   uv run eval @ ~/prime-intellect/env/environments/recipe_classify/configs/eval-gold.toml -m <same path>
+mode = "eval"
+model = "Qwen/Qwen3.5-2B"
+group_size = 1
+
+[client]
+base_url = "http://localhost:8000/v1"
+
+[sampling]
+max_completion_tokens = 400
+temperature = 0.7
+
+[[source]]
+name = "recipe-classify-gold"
+env.taskset.id = "recipe-classify"
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"

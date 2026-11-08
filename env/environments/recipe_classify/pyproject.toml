@@ -1,0 +1,16 @@
+[project]
+name = "recipe-classify"
+version = "0.1.0"
+description = "recipe-classify — tag a recipe with its culinary-tradition origin path and ingredient-class contains set against a controlled taxonomy (single-turn; hierarchical + recall-weighted reward)."
+requires-python = ">=3.11"
+dependencies = ["recipe-tax", "pyyaml>=6"]
+
+[tool.uv.sources]
+recipe-tax = { path = "../..", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["recipe_classify"]

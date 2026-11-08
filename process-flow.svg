@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="700" viewBox="0 0 680 700" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Recipe RL project — process flow</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .th { font-size: 14px; font-weight: 500; }
+      .ts { font-size: 12px; font-weight: 400; }
+      .arr { stroke: #5F5E5A; stroke-width: 1.5; fill: none; }
+      .purple rect { fill: #EEEDFE; stroke: #534AB7; }
+      .purple .th { fill: #3C3489; } .purple .ts { fill: #534AB7; }
+      .teal rect { fill: #E1F5EE; stroke: #0F6E56; }
+      .teal .th { fill: #085041; } .teal .ts { fill: #0F6E56; }
+      .gray rect { fill: #F7F6F2; stroke: #888780; }
+      .gray .th { fill: #2C2C2A; } .gray .ts { fill: #5F5E5A; }
+      .legend { fill: #5F5E5A; font-size: 12px; }
+    </style>
+  </defs>
+  <rect width="680" height="700" fill="#FFFFFF"/>
+
+  <g class="purple"><rect x="230" y="40" width="220" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="340" y="58" text-anchor="middle" dominant-baseline="central">Taxonomy v0.2</text>
+    <text class="ts" x="340" y="78" text-anchor="middle" dominant-baseline="central">positive space, derived filters</text></g>
+  <path d="M340 96 L340 112 L210 112 L210 128" class="arr" marker-end="url(#arrow)"/>
+  <path d="M340 112 L470 112 L470 128" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="teal"><rect x="110" y="130" width="200" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="210" y="148" text-anchor="middle" dominant-baseline="central">Gold eval set</text>
+    <text class="ts" x="210" y="168" text-anchor="middle" dominant-baseline="central">300–500, human-verified</text></g>
+  <g class="teal"><rect x="370" y="130" width="200" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="470" y="148" text-anchor="middle" dominant-baseline="central">Silver train set</text>
+    <text class="ts" x="470" y="168" text-anchor="middle" dominant-baseline="central">2–5k, model-labeled</text></g>
+  <path d="M210 186 L210 204 L340 204 L340 218" class="arr" marker-end="url(#arrow)"/>
+  <path d="M470 186 L470 204 L340 204" class="arr"/>
+
+  <g class="purple"><rect x="230" y="220" width="220" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="340" y="238" text-anchor="middle" dominant-baseline="central">verifiers environment</text>
+    <text class="ts" x="340" y="258" text-anchor="middle" dominant-baseline="central">parser + rubric + reward</text></g>
+  <line x1="340" y1="276" x2="340" y2="308" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="gray"><rect x="230" y="310" width="220" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="340" y="328" text-anchor="middle" dominant-baseline="central">Baseline eval</text>
+    <text class="ts" x="340" y="348" text-anchor="middle" dominant-baseline="central">needs 20–60 % band</text></g>
+  <line x1="452" y1="338" x2="488" y2="338" class="arr" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <g class="gray"><rect x="490" y="310" width="150" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="565" y="328" text-anchor="middle" dominant-baseline="central">Swap model size</text>
+    <text class="ts" x="565" y="348" text-anchor="middle" dominant-baseline="central">if out of band</text></g>
+  <line x1="340" y1="366" x2="340" y2="398" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="gray"><rect x="230" y="400" width="220" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="340" y="418" text-anchor="middle" dominant-baseline="central">GRPO runs on Lab</text>
+    <text class="ts" x="340" y="438" text-anchor="middle" dominant-baseline="central">small Qwen, 3–6 runs</text></g>
+  <line x1="340" y1="456" x2="340" y2="488" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="gray"><rect x="230" y="490" width="220" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="340" y="508" text-anchor="middle" dominant-baseline="central">Panel + trajectories</text>
+    <text class="ts" x="340" y="528" text-anchor="middle" dominant-baseline="central">hunt exploits, attribute gains</text></g>
+  <path d="M230 518 L120 518 L120 248 L228 248" class="arr" marker-end="url(#arrow)"/>
+  <text class="legend" x="128" y="383" dominant-baseline="central">↻ fix rubric</text>
+
+  <path d="M340 546 L340 562 L210 562 L210 578" class="arr" marker-end="url(#arrow)"/>
+  <path d="M340 562 L470 562 L470 578" class="arr" marker-end="url(#arrow)"/>
+  <g class="gray"><rect x="110" y="580" width="200" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="210" y="598" text-anchor="middle" dominant-baseline="central">Publish to Hub</text>
+    <text class="ts" x="210" y="618" text-anchor="middle" dominant-baseline="central">env + write-up</text></g>
+  <g class="gray"><rect x="370" y="580" width="200" height="56" rx="8" stroke-width="0.75"/>
+    <text class="th" x="470" y="598" text-anchor="middle" dominant-baseline="central">Tags into SaffronSifu</text>
+    <text class="ts" x="470" y="618" text-anchor="middle" dominant-baseline="central">model output → app</text></g>
+
+  <g class="purple"><rect x="230" y="658" width="12" height="12" rx="2" stroke-width="0.75"/></g>
+  <text class="legend" x="248" y="664" dominant-baseline="central">authored</text>
+  <g class="teal"><rect x="320" y="658" width="12" height="12" rx="2" stroke-width="0.75"/></g>
+  <text class="legend" x="338" y="664" dominant-baseline="central">data</text>
+  <g class="gray"><rect x="390" y="658" width="12" height="12" rx="2" stroke-width="0.75"/></g>
+  <text class="legend" x="408" y="664" dominant-baseline="central">runs and outputs</text>
+</svg>

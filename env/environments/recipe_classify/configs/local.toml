@@ -1,0 +1,13 @@
+# recipe-classify: a single chat completion per task — no sandbox, no code execution.
+#   uv run vf-validate recipe-classify -n 5 --runtime.type subprocess
+#   uv run vf-run recipe-classify -m <model> -n 50 -r 1 @ environments/recipe_classify/configs/local.toml
+[env.agent.harness]
+id = "null"            # plain chat-completions harness (NEEDS_CONTAINER = False)
+
+[env.agent.runtime]
+type = "subprocess"    # local process; the default `prime` runtime provisions a billed cloud sandbox per rollout
+
+[sampling]
+temperature = 0.7      # baseline sampling; GRPO wants variance, so keep > 0
+max_tokens = 400       # the answer is one JSON object; cap runaway generations
+reasoning_effort = "none"   # qwen3.5 / most hosted models think by default; thinking burns the cap and content stays empty
