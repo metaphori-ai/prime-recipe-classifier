@@ -1,24 +1,24 @@
 # prime-recipe-classifier
 
-Post-training a 2B model to classify recipes against a controlled culinary taxonomy — origin tradition path plus
-ingredient-class `contains` — on Prime Intellect's stack (`verifiers` v1 environment, `prime-rl` GRPO), with every arm
-evaluated on one human-labeled gold set under one scoring function.
+Post-training a 2B model to classify recipes against a controlled culinary taxonomy — origin tradition path (hierarchical classification like Europe > Spain > Basque) plus ingredient-class `contains` — on Prime Intellect's stack (`verifiers` v1 environment, `prime-rl` GRPO), with every arm evaluated on one human-labeled gold set under one scoring function.
 
-The interesting part is not the classifier. It is what the RL loop exposed about the reward, the data and the training
-setup, and how each finding changed the next run. The dated record is in [`LOG.md`](LOG.md); the analysis in
+There were many intersting parts of this process, and for training, it is what the RL loop exposed about the reward, the data and the training setup, and how each finding changed the next run. The dated record is in [`LOG.md`](LOG.md); the analysis in
 [`TRAINING.md`](TRAINING.md).
 
 ![project journey](journey.svg)
 
-**Why day 2 went back to the data.** Day 1 ended with every arm telling the same story from a different angle: the 2B and
+## Day 2 went back to the data
+
+Day 1 ended with every arm maxed out on improvements: the 2B and
 4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at
-most 9 of the 32 influences in the gold set while the training labels carried an influence on 0.6% of recipes. Nothing in the
-training setup was the binding constraint — the silver labels were. Scaling parameters or RL steps against those labels
-could only converge on them. So the next step was not a better run but better data: measure every candidate teacher against
+most 9 of the 32 recipe influences (the harder challenge) in the gold set while the training labels carried an influence on only 0.6% of recipes. 
+
+It became clear we need to look at the label data on the silvers. Scaling parameters or RL steps against those labels
+could only converge on them. So the next step was better data: measure every candidate teacher against
 the human gold, pick the best, relabel. Along the way the verifier flagged `contains` labels in the gold set itself that it
-could not ground (extract-only `alcohol`, gelatin as `pork`); 11 gold rows were corrected and every arm re-scored, so the
-ruler was fixed before anything was measured against it again. The relabel moved the influence rate from 0.6% to 6.6%, the
-SFT ceiling from 0.78 to 0.82, and gave RL something it could amplify.
+could not ground (vanilla extract-only labelled with `alcohol`, gelatin as `pork`); 11 gold rows were corrected and every arm re-scored. 
+
+The relabel moved the influence rate from 0.6% to 6.6%, the SFT ceiling from 0.78 to 0.82, and gave RL something it could amplify.
 
 ![day 2: teachers, relabel, two SFT stacks, GRPO from SFT](journey-2b.svg)
 
@@ -57,12 +57,17 @@ Claude Sonnet 5.5 78.1% / 18 · qwen3.6:27b (local) pending.
 
 ## What arm D says about SFT vs RL
 
-Same labels, same reward, same 2B. SFT on the Sonnet silver (B″) got 0.821 by imitation. GRPO from that checkpoint, with no
+> Recipe Influences are important for any fusion recipes that combine elements from different cultures. The recipe can have a primary technique or form from one culture, but influenced by another. Reversing this is incorrect and penalized. (See: https://saffronsifu.app/r/0PWWrU7RhpdsiWwvGrQQAF which is Japanese in form, but Korean in influence)
+
+Using the same labels, same reward, same 2B. SFT on the Sonnet silver (B″) got 0.821 by imitation. GRPO from that checkpoint, with no
 new labels, added +0.036 by comparing its own samples. Where the gain came from: origin +0.042 (more exact paths on fusion and
 regional recipes), `contains` +0.030 (fewer spurious classes), and influences emitted on 11 recipes instead of 3 — a behaviour
 the SFT model produced on 0.7% of outputs although 6.6% of its training rows carried one. RL amplified a rare behaviour 3.7×
-because the reward's influence term made the one sibling that emitted an influence beat the seven that did not. What RL did
-not do: deepen paths (2.54 → 2.48; the 10% depth bonus is too small against the Jaccard's shallow-path safety), or close the
+because the reward's influence term made the one sibling that emitted an influence beat the seven that did not. 
+
+> Classification Depth is a hierarchy like South Asian > Indian > Punjabi instead of just South Asian, or just Indian, or just Punjabi, which each get partial credit in the reward function if present, and any incorrect depth at any level is zero credit.
+
+What RL did not do: deepen paths (2.54 → 2.48; the 10% depth bonus is too small against the Jaccard's shallow-path safety), or close the
 teacher gap (origin 0.767 vs Sonnet's 0.843 on the same gold — the headline 0.857 includes `contains`, whose labels are better
 than the origin labels). RL from the base model alone (arm C) reached 0.517.
 
@@ -84,6 +89,8 @@ Two things this table taught: a teacher's *influence precision* and *recall* are
 only when sure, 89% precision; Sonnet finds one more but at 55%); and a thinking budget that truncates is not a worse
 version of the same measurement, it is a different sample. Caveat on all rows: the teacher was chosen *by* its gold score,
 so the table mildly overfits the 439; a held-out slice would make the choice clean.
+
+> We may revisit the gold varieties and increase fusion recipe % and more diversity to see if that creates overfitting/memorization or generalization.
 
 ## Layout
 
@@ -141,6 +148,28 @@ CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl
 
 ## How this was built
 
-Directed, labeled and decided by Jasdeep Jaitla; code and most analysis written with Claude as a pair, over roughly one
+Directed, labeled and decided by Jasdeep Jaitla; code and analysis written with Claude as a pair, over roughly one
 weekend. Every decision, mistake and reversal is in [`LOG.md`](LOG.md) with a date — including the model's own errors
-(a rename it claimed to have applied and had not; a reward design that RL took apart in 35 steps). That record is the point.
+(a rename it claimed to have applied and had not; a reward design that RL took apart in 35 steps). 
+
+## We also discovered a small bug in prime-rl
+
+`tools/convert_dcp_to_bf16.py` is the only path from a prime-rl SFT checkpoint (DCP) to HF weights that vLLM or any other
+loader can read. On Qwen3.5-2B it crashed, and the fix we tried first produced a *subtly wrong* export — the two halves of one bug:
+
+1. **The crash.** The tool does `for key in getattr(model, "_tied_weights_keys", [])` to drop the duplicated output head of a
+   tied-embedding model. On this model the attribute exists but is `None`, so the default never applies and Python tries to
+   iterate `None` → `TypeError`. Qwen3.5-2B ties `lm_head` to `embed_tokens`, so the only models that hit this are exactly the
+   ones the loop is for.
+2. **The quiet half.** Patching it to `getattr(..., None) or []` makes the conversion run — but the loop is now a no-op, so the
+   export carries `lm_head.weight` as a full copy of `embed_tokens`. vLLM loads that without complaint (we evaluated B″ at
+   0.821 through it). `mlx-lm` refuses: `Received 1 parameters not in model: language_model.lm_head.weight`. An export that
+   some loaders accept and others reject is worse than a crash, because you find out one stack later.
+
+The fix the tool needs: when `config.tie_word_embeddings` is set and `_tied_weights_keys` is missing or `None`, drop
+`lm_head.weight` (and its index entry) explicitly rather than trusting the attribute. The local workaround for an export that
+already exists is to remove that one tensor from its shard and from `model.safetensors.index.json`; the weights are identical
+to `embed_tokens`, so nothing is lost. After that the same file loaded in both stacks and scored 0.821 (vLLM) and 0.817 (MLX)
+on the 439 gold — which is also how we confirmed the two eval stacks agree.
+
+Found at prime-rl commit `cbd3702`; the patched tool and its `.orig` are in `pod-archive/tools/` locally (not in this repo).
