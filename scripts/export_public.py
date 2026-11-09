@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "public-repo"
 
-COPY_FILES = ["taxonomy.yaml", "LOG.md", "TRAINING.md", "TAXONOMY.md", "OVERVIEW.md", "PLAN.md", "journey.svg", "process-flow.svg"]
+COPY_FILES = ["taxonomy.yaml", "LOG.md", "TRAINING.md", "TAXONOMY.md", "OVERVIEW.md", "PLAN.md", "journey.svg", "journey-2.svg", "process-flow.svg"]
 COPY_TREES = {"env/recipe_tax": "env/recipe_tax", "env/tests": "env/tests",
               "env/environments/recipe_classify": "env/environments/recipe_classify", "scripts": "scripts"}
 EXCLUDE_DIRS = {".venv", "outputs", "__pycache__", "*.egg-info", ".pytest_cache"}
@@ -24,17 +24,19 @@ DATA_FILES = {  # src -> dst, filtered to publishable ids
     "data/dataset/train.jsonl": "data/dataset/train.jsonl",
     "data/dataset/manifest.json": "data/dataset/manifest.json",
     "data/dataset_dsv4/train.jsonl": "data/dataset_dsv4/train.jsonl",
+    "data/dataset_sonnet/train.jsonl": "data/dataset_sonnet/train.jsonl",
     "data/gold/gold.jsonl": "data/gold/gold.jsonl",
     "data/silver/origin_eval_dsv4.jsonl": "data/silver/origin_eval_dsv4.jsonl",
     "data/silver/origin_eval_qwen36.jsonl": "data/silver/origin_eval_qwen36.jsonl",
     "data/silver/origin_eval_sonnet55.jsonl": "data/silver/origin_eval_sonnet55.jsonl",
+    "data/silver/origin_eval_qwen36_27b_nothink.jsonl": "data/silver/origin_eval_qwen36_27b_nothink.jsonl",
 }
 RAW_PUBLIC = {"data/raw/foodcom.jsonl": "data/raw/foodcom.jsonl", "data/raw/wikibooks.jsonl": "data/raw/wikibooks.jsonl"}
 SECRET_RE = re.compile(r"(sk-ant-[A-Za-z0-9_-]{10,}|hf_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]\s*['\"][A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{20,})", re.I)
 
 def publishable_ids() -> set[str]:
     ids = set()
-    for f in ("data/dataset/eval.jsonl", "data/dataset/train.jsonl", "data/dataset_dsv4/train.jsonl"):
+    for f in ("data/dataset/eval.jsonl", "data/dataset/train.jsonl", "data/dataset_dsv4/train.jsonl", "data/dataset_sonnet/train.jsonl"):
         p = ROOT / f
         if p.exists():
             for l in open(p):

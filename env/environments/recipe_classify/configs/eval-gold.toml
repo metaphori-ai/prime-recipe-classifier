@@ -1,6 +1,9 @@
 # Evaluate any checkpoint on ALL 439 gold against a local vLLM server on the pod:
 #   uv run inference --vllm.model <path-or-hf-id> --gpu-memory-utilization 0.6 &
 #   uv run eval @ ~/prime-intellect/env/environments/recipe_classify/configs/eval-gold.toml -m <same path>
+# Thinking: eval mode has no renderer option; the model dir's own chat template decides. Verified on the arm C eval
+# traces (median 78 output tokens, max 132, all finish_reason=stop, no <think>) that dirs carrying the base Qwen3.5-2B
+# tokenizer render thinking OFF. Check the same stats on every new eval; thinking ON would truncate at 400 and score ~0.
 mode = "eval"
 model = "Qwen/Qwen3.5-2B"
 group_size = 1

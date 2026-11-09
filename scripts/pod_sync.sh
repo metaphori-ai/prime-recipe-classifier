@@ -5,7 +5,7 @@
 set -euo pipefail
 HOST="${1:?ssh host, e.g. root@1.2.3.4 or a ~/.ssh/config alias}"; PORT="${2:-22}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-ssh -p "$PORT" "$HOST" 'mkdir -p ~/prime-intellect/env ~/prime-intellect/data/dataset ~/prime-intellect/data/sft'
+ssh -p "$PORT" "$HOST" 'mkdir -p ~/prime-intellect/env ~/prime-intellect/data/dataset ~/prime-intellect/data/sft ~/prime-intellect/data/dataset_sonnet ~/prime-intellect/data/sft_sonnet ~/prime-intellect/models'
 
 # --- secrets: build ~/.pod-env on the Mac from local credentials, ship it, never echo it ---
 # PRIME_API_KEY / PRIME_TEAM_ID from ~/.prime/config.json; HF_TOKEN from $HF_TOKEN or the HF CLI token cache.
@@ -37,5 +37,6 @@ rsync -avz -e "ssh -p $PORT" \
   "$SRC/data/dataset/train.jsonl" "$SRC/data/dataset/eval.jsonl" "$SRC/data/dataset/manifest.json" \
   "$HOST:~/prime-intellect/data/dataset/"
 rsync -avz -e "ssh -p $PORT" "$SRC/data/sft/train.jsonl" "$SRC/data/sft/valid.jsonl" "$HOST:~/prime-intellect/data/sft/"
+for d in dataset_sonnet sft_sonnet; do [ -d "$SRC/data/$d" ] && rsync -avz -e "ssh -p $PORT" "$SRC/data/$d/" "$HOST:~/prime-intellect/data/$d/"; done
 rsync -avz -e "ssh -p $PORT" "$SRC/taxonomy.yaml" "$HOST:~/prime-intellect/taxonomy.yaml"
 echo "synced. On the pod: cd ~/prime-rl && uv pip install -e ~/prime-intellect/env -e ~/prime-intellect/env/environments/recipe_classify"

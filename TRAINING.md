@@ -47,6 +47,20 @@ cd env && OPENAI_API_KEY=x uv run vf-run recipe-classify -m runs/sft-2b-fused -n
    @ environments/recipe_classify/configs/local.toml \
    --client.base_url http://localhost:8080/v1 --client.api_key_var OPENAI_API_KEY
 ```
+**What actually ran** (the block above is the original plan; `mlx_lm.lora` OOMs on Qwen3.5 — see Blockers). Verbatim from shell
+history, this produced `runs/sft-2b` (B = 0.782) and, with `4B`/`runs/sft-4b`, the 4B row. It is LoRA rank 8 on 16 layers,
+auto-fused into the adapter dir; the pod's `uv run sft` is a *full* fine-tune — keep that in mind when comparing B'' across stacks.
+```bash
+mlx_lm_lora.train --model Qwen/Qwen3.5-2B --train --train-mode sft \
+  --data ~/svml/prime-intellect/data/sft --mask-prompt \
+  --batch-size 4 --gradient-accumulation-steps 2 --iters 1600 --learning-rate 1e-5 \
+  --max-seq-length 3584 --grad-checkpoint --num-layers 16 \
+  --steps-per-eval 200 --save-every 400 \
+  --adapter-path ~/svml/prime-intellect/runs/sft-2b
+# Sonnet-silver variant (product artifact): --data .../data/sft_sonnet --adapter-path .../runs/sft-2b-sonnet
+# then: mlx_lm.server --model runs/sft-2b-sonnet --port 8080 --chat-template-args '{"enable_thinking": false}' &
+#       bash scripts/vf_run_mlx.sh runs/sft-2b-sonnet 439
+```
 Why these numbers:
 - `--mask-prompt` is the one flag that matters. The system prompt is ~2,470 tokens and the answer ~60; without masking,
   97 % of the loss is the model memorizing the taxonomy tree it already gets for free, and the label signal drowns.
@@ -306,10 +320,32 @@ All saved traces re-scored offline against **reward v2 + corrected gold** (same 
 | A. base 2B | 0.244 | 0.320 | 0.152 | 52 | 2 |
 | B. SFT 2B (consensus silver) | 0.782 | 0.703 | 0.877 | 262 | 5 |
 | B. SFT 4B (consensus silver) | 0.794 | 0.724 | 0.880 | 271 | 9 |
-| B'. SFT 2B (dsv4, single teacher) | training | | | | |
-| B''. SFT 2B (Sonnet 5.5 silver) | relabel running | | | | |
+| B'. SFT 2B (dsv4, single teacher) | not run (superseded by B'') | | | | |
+| **B''. SFT 2B (Sonnet 5.5 silver, full FT on pod)** | **0.821** | 0.725 | 0.937 | — (traces on pod) | 3 emitted |
 | C. GRPO 2B from base (v2 reward, staleness 2, batch 128, stopped @ step 23) | **0.517** | 0.524 | 0.510 | — | 0 |
-| D. GRPO 2B from SFT | pending | | | | |
+| **D. GRPO 2B from B'' (T 1.2, 80 steps, reward v2)** | **0.857** | 0.767 | 0.967 | — (traces on pod) | 11 emitted |
+
+B'' notes: prime-rl `sft`, 320 steps × batch 32 (~2 epochs of 4,813), lr 1e-5, full fine-tune, 33 min on the H200; eval via
+vLLM T=0.7 (median 62 output tokens, max 133, 0 truncations, gate_fail 0). primary_depth 2.54 (gold ≈ 2.6; arm C was 1.32).
+**Labels moved the 2B more than doubling parameters did** (+0.038 vs 2B-consensus, +0.027 vs 4B-consensus). Caveats: B/4B were
+evaluated through MLX on the Mac, B'' through vLLM on the pod (both T=0.7); B'' was trained and evaluated with the
+Contemporary-is-form sentence in CONVENTIONS, which B never saw. influence_pred 0.0068 (3/439) although 6.6% of training
+rows carry an influence: SFT on a 2B treats a rare optional field as "omit" — the one dimension left for arm D to show RL adds something.
+
+### Arm D result (2026-11-09)
+GRPO from B'' (Sonnet-silver SFT), rollout temperature 1.2, batch 128 episodes (16 prompts × 8), max_staleness 2, lr 1e-6, 80
+steps, 2 h 12 m on one H200 (trainer 70–120 s/step at MFU 4–8%; 88% of rollouts discarded as stale on the shared GPU).
+Gold-150 during training: v0 .818 → v10 .827 → v20 .841 → v30 .845 → v50 .846 → v70 .866 → v80 .852. Final policy
+(broadcasts/step_80 + SFT dir config/tokenizer) on all 439: **0.857** (B'' 0.821): origin 0.725 → 0.767, contains 0.937 → 0.967,
+depth 2.54 → 2.48, **influence_pred 0.007 → 0.025 (3 → 11 recipes)**. Entropy 0.07 → 0.019; no_signal groups 18% → ~38%;
+grad norm 0.3 → 0.15; mismatch KL 0 throughout; no reward hacking under v2.
+Readings: (1) the "SFT then RL" recipe worked as advertised — imitation did the big jump, selection added +0.036 on top with no
+new labels; (2) RL amplified a *rare* behaviour (influences) 3.7× — the earlier claim that it could not move something SFT emits on
+0.7% of outputs was wrong: rare is enough, absent is not; (3) D's origin 0.767 is still 0.08 under the Sonnet teacher's 0.843 on
+the same gold — the label ceiling moved, it did not disappear; the headline 0.857 includes Jev-quality `contains`; (4) depth did
+not improve (2.54 → 2.48) — the 10% depth bonus is still too small to pull against the shallow-path safety of the Jaccard.
+Not yet done: exact-match count and distinct-answers-per-group from the pulled traces; the v70 checkpoint is not saved (ckpt
+interval 20 → step_60/step_80 DCP only).
 
 ### Teacher selection on the 439 gold (2026-11-08) — `label_origin compare`, now with influence recall
 | teacher | exact | origin score | influences found /32 | emitted | parse errors |
@@ -317,11 +353,22 @@ All saved traces re-scored offline against **reward v2 + corrected gold** (same 
 | Qwen3.6-35B-A3B (Prime Inference) | 67.4% | 0.761 | 11 | 13 | 19 |
 | DeepSeek V4 (Prime Inference) | 68.5% | 0.784 | 12 | 14 | 1 |
 | **Claude Sonnet 5.5** (Anthropic API, OpenAI-compat) | **78.1%** | **0.843** | **18** | 33 | 0 |
-| qwen3.6:27b (local Ollama, thinking) | pending — needs Mac GPU | | | | |
+| qwen3.6:27b (local Ollama, thinking, 2k tokens) | 80.1% of **291 answered** | 0.874 | 2 (of 7 in the answered subset) | 4 | **148 truncated (34%)** — survivorship-biased; rerun with thinking off and with 8k budget |
+| **qwen3.6:27b (local Ollama, thinking OFF, 600 tokens)** | **72.6%** | **0.808** | **17** | 19 | 1 — clean, comparable row |
+| qwen3.6:27b (local Ollama, thinking ON, 6k budget) | 74.5% | 0.826 | 17 | 21 | 0 — all answered; 1,865 out tokens/recipe (24× no-think) for +0.018 |
 Sonnet emits influences at the gold rate (33 vs 32) with ~55% precision; the hosted teachers suppress them. Top confusion for
 every teacher: gold `Unplaced > Contemporary` → `American` (12 for Sonnet) — likely partly a GOLD inconsistency with our own
 convention; review in the label tool. Cost: 2.23M input tokens / 439 recipes (~5k each). Full train relabel ≈ 27M tokens;
 adding a native Anthropic path with prompt caching for the system block before running it.
+27B with thinking and a budget it can't exhaust: 0.826, +0.018 over no-think and the same 17 influences, at 24× the output
+tokens; the 2k-budget run's 0.874 'on survivors' was survivorship bias (full-answer number is 0.826). Thinking moved confidence
+both ways (fewer depth collapses, a new over-deepening British → English) rather than adding knowledge. Sonnet still leads.
+27B no-think: second place (Sonnet 0.843 > 27B 0.808 > DeepSeek 0.784 > Qwen3.6-35B 0.761). Influence *precision* is the
+inverse story: 27B 17/19 = 89% vs Sonnet 18/33 = 55% — it only names an influence when sure. Its confusions are almost all
+depth collapses (Yoruba/Hausa → Nigerian ×9, Italian-American/Midwestern/Californian/Hawaiian → American ×13) plus the known
+Contemporary↔American blur (7+3); very few wrong-region errors. ~77 output tokens/recipe, 439 in ~9 min on the M5 — a free,
+local teacher within 0.035 of Sonnet, which matters for SaffronSifu volume later. Caveat (all rows): teacher chosen BY gold
+score, so this table mildly overfits the 439; the choice would need a held-out slice to be clean.
 Decision: Sonnet 5.5 is the teacher for the next silver (origin only; Jev keeps `contains`). Dataset → `data/dataset_sonnet`.
 
 ### Arm C result (2026-11-08) — 2B GRPO from base, reward v2, 439 audited gold
@@ -335,6 +382,11 @@ Arm D (from SFT) must keep exploration alive: rollout temperature ↑ (1.2), con
 Checkpoint note: prime-rl `checkpoints/step_N` is trainer-format (DCP); vLLM-loadable weights are in `broadcasts/step_N`
 (safetensors + index only) — assemble a model dir by adding config/tokenizer files from the base HF snapshot, keeping the
 broadcast's own `model.safetensors.index.json`. Saved as `~/prime-intellect/models/grpo-base-v2-step22` on the pod.
+The supported route (found 2026-11-09, prime-rl commit cbd3702): `uv run python tools/convert_dcp_to_bf16.py <run>/checkpoints/step_N`
+→ `<run>/checkpoints/step_N/weights` with config.json + tokenizer + safetensors, loadable by `uv run inference --vllm.model`.
+SFT runs never write HF weights or broadcasts (broadcasts exist only for online eval and need a live receiver), so for SFT
+this converter is the *only* export path; a `[ckpt]` block (even empty) is what makes the final DCP save happen. The
+broadcast-assembly trick above is only for RL runs, where `broadcasts/step_N` already exists.
 Breakdown (prime-rl eval metrics): origin 0.524, contains 0.510, primary_depth **1.32** (gold ≈ 2.6), influence_pred **0.0**,
 evidence_coverage 1.00, unsupported_evidence 0.05, gate_fail 0.7%, unknown_classes 0.016, response ~190 chars.
 Reward-design lessons from arm C: (1) hierarchical partial credit makes SHALLOW paths a safe local optimum — the ×1.1 depth
