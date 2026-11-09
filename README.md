@@ -22,6 +22,22 @@ The relabel moved the influence rate from 0.6% to 6.6%, the SFT ceiling from 0.7
 
 (Detailed version with the numbers behind each box: [`journey-2.svg`](journey-2.svg).)
 
+## Reward V1 Hacking vs V2
+
+> In V1, the reward paid a flat fee (0.5 on `contains`) for saying "incomplete," and the model learned to use it as an escape hatch on every recipe.
+
+V2 only pays for "incomplete" when the gold label also says the ingredient list is incomplete; claiming it otherwise scores 0.
+
+> In V1 a missed allergen cost 2.0 but an extra false one cost only 0.5 — for allergens a miss is worse than an over-warning.
+
+The model's precision was too low for that ratio: padding the list with extra allergens scored higher than an honest list with one miss. V2 doubled the false-positive cost to 1.0, counts duplicates, and zeroes the score above 10 classes.
+
+> In V1, the evidence check only asked whether the quoted string was a real ingredient, not whether that ingredient supports the claimed allergen, so `"egg": "tur dal"` passed.
+
+It was a real ingredient, just not tied to the allergen — so every padded entry came with "evidence." V2 requires the quoted ingredient to be in the lexicon for the claimed class, so the reward is tied to a legitimate ingredient→allergen link.
+
+The model found all three: it said "incomplete" everywhere, padded the allergen list when it didn't, and pointed at random ingredients as evidence. Its training score went up while its accuracy on the human gold set fell from 0.46 to 0.12 — that divergence is the signature of reward hacking.
+
 ## Results — 2B unless noted, reward v2, audited gold
 
 | arm | 439 gold | 350 public subset | notes |
