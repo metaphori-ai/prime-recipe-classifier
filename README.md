@@ -2,16 +2,14 @@
 
 Post-training a 2B model to classify recipes against a controlled culinary taxonomy — origin tradition path (hierarchical classification like Europe > Spain > Basque) plus ingredient-class `contains` — on Prime Intellect's stack (`verifiers` v1 environment, `prime-rl` GRPO), with every arm evaluated on one human-labeled gold set under one scoring function.
 
-There were many intersting parts of this process, and for training, it is what the RL loop exposed about the reward, the data and the training setup, and how each finding changed the next run. The dated record is in [`LOG.md`](LOG.md); the analysis in
+There were many interesting parts of this process; the one that mattered most for training is what the RL loop exposed about the reward, the data and the training setup, and how each finding changed the next run. The dated record is in [`LOG.md`](LOG.md); the analysis in
 [`TRAINING.md`](TRAINING.md).
 
 ![project journey](journey.svg)
 
 ## Day 2 went back to the data
 
-Day 1 ended with every arm maxed out on improvements: the 2B and
-4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at
-most 9 of the 32 recipe influences (the harder challenge) in the gold set while the training labels carried an influence on only 0.6% of recipes. 
+Day 1 ended with every arm converging on the same ceiling: the 2B and 4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at most 9 of the 32 recipe influences (the harder challenge) in the gold set while the training labels carried an influence on only 0.6% of recipes. 
 
 It became clear we need to look at the label data on the silvers. Scaling parameters or RL steps against those labels
 could only converge on them. So the next step was better data: measure every candidate teacher against
