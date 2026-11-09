@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "public-repo"
 
-COPY_FILES = ["taxonomy.yaml", "LOG.md", "TRAINING.md", "TAXONOMY.md", "OVERVIEW.md", "PLAN.md", "journey.svg", "journey-2.svg", "process-flow.svg"]
+COPY_FILES = ["taxonomy.yaml", "LOG.md", "TRAINING.md", "TAXONOMY.md", "OVERVIEW.md", "PLAN.md", "journey.svg", "journey-2.svg", "journey-2b.svg", "process-flow.svg"]
 COPY_TREES = {"env/recipe_tax": "env/recipe_tax", "env/tests": "env/tests",
               "env/environments/recipe_classify": "env/environments/recipe_classify", "scripts": "scripts"}
 EXCLUDE_DIRS = {".venv", "outputs", "__pycache__", "*.egg-info", ".pytest_cache"}

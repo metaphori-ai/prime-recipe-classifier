@@ -10,7 +10,19 @@ setup, and how each finding changed the next run. The dated record is in [`LOG.m
 
 ![project journey](journey.svg)
 
-![day 2: teachers, relabel, SFT on the pod, GRPO from SFT](journey-2.svg)
+**Why day 2 went back to the data.** Day 1 ended with every arm telling the same story from a different angle: the 2B and
+4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at
+most 9 of the 32 influences in the gold set while the training labels carried an influence on 0.6% of recipes. Nothing in the
+training setup was the binding constraint — the silver labels were. Scaling parameters or RL steps against those labels
+could only converge on them. So the next step was not a better run but better data: measure every candidate teacher against
+the human gold, pick the best, relabel. Along the way the verifier flagged `contains` labels in the gold set itself that it
+could not ground (extract-only `alcohol`, gelatin as `pork`); 11 gold rows were corrected and every arm re-scored, so the
+ruler was fixed before anything was measured against it again. The relabel moved the influence rate from 0.6% to 6.6%, the
+SFT ceiling from 0.78 to 0.82, and gave RL something it could amplify.
+
+![day 2: teachers, relabel, two SFT stacks, GRPO from SFT](journey-2b.svg)
+
+(Detailed version with the numbers behind each box: [`journey-2.svg`](journey-2.svg).)
 
 ## Results — 2B unless noted, reward v2, audited gold
 
