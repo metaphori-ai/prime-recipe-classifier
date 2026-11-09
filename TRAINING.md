@@ -321,7 +321,8 @@ All saved traces re-scored offline against **reward v2 + corrected gold** (same 
 | B. SFT 2B (consensus silver) | 0.782 | 0.703 | 0.877 | 262 | 5 |
 | B. SFT 4B (consensus silver) | 0.794 | 0.724 | 0.880 | 271 | 9 |
 | B'. SFT 2B (dsv4, single teacher) | not run (superseded by B'') | | | | |
-| **B''. SFT 2B (Sonnet 5.5 silver, full FT on pod)** | **0.821** | 0.725 | 0.937 | — (traces on pod) | 3 emitted |
+| **B''. SFT 2B (Sonnet 5.5 silver, full FT on pod)** | **0.821** (vLLM) / 0.817 (MLX) | 0.725 | 0.937 | — | 3 emitted |
+| B''-mac. SFT 2B (Sonnet silver, LoRA r8/16 layers, MLX) | 0.782 / 0.769 (two draws) | 0.702 | 0.880 | — | 16 emitted |
 | C. GRPO 2B from base (v2 reward, staleness 2, batch 128, stopped @ step 23) | **0.517** | 0.524 | 0.510 | — | 0 |
 | **D. GRPO 2B from B'' (T 1.2, 80 steps, reward v2)** | **0.857** | 0.767 | 0.967 | — (traces on pod) | 11 emitted |
 
@@ -331,6 +332,18 @@ vLLM T=0.7 (median 62 output tokens, max 133, 0 truncations, gate_fail 0). prima
 evaluated through MLX on the Mac, B'' through vLLM on the pod (both T=0.7); B'' was trained and evaluated with the
 Contemporary-is-form sentence in CONVENTIONS, which B never saw. influence_pred 0.0068 (3/439) although 6.6% of training
 rows carry an influence: SFT on a 2B treats a rare optional field as "omit" — the one dimension left for arm D to show RL adds something.
+
+### LoRA vs full fine-tune on the same labels (2026-11-09)
+Same Sonnet silver, same 2B, same eval T 0.7. LoRA r8 on 16 layers (5.6M trainable, mlx-lm-lora, 1,600 iters ≈ 2.7 epochs, 95 min on
+the M5) = **0.782** — identical to the consensus-silver LoRA — vs full FT (1.9B trainable, prime-rl, 2 epochs, 33 min on an H200) =
+**0.821**. The gap is mostly `contains` (0.880 vs 0.937), whose labels are the same Jev labels in both, so this reads as a
+*capacity* limit of r8/16-layer LoRA on this task rather than a label effect; origin moved less (0.702 vs 0.725). The LoRA emits
+influences on 16 recipes (most of any arm) without an origin gain → low precision, the 0.4 influence term nets to ~0.
+**Eval noise, measured:** the same LoRA model scored twice on 439 at T 0.7 gave 0.782 and 0.769 (Δ 0.013). Treat any two table
+entries within ~0.02 as tied; this covers B 2B vs 4B (0.782 vs 0.794) and v30–v80 of arm D's gold-150 curve.
+Eval-stack control (done): the full-FT weights served through mlx_lm.server score **0.817** on 439 vs 0.821 through vLLM — within
+the measured noise. Cross-stack entries in the table are comparable, and the LoRA gap is capacity. Product implication: ship the
+full-FT weights (they run on the Mac at 0.817) or retry LoRA at higher rank / all layers; r8 on 16 layers caps `contains` at ~0.88.
 
 ### Arm D result (2026-11-09)
 GRPO from B'' (Sonnet-silver SFT), rollout temperature 1.2, batch 128 episodes (16 prompts × 8), max_staleness 2, lr 1e-6, 80
@@ -385,7 +398,10 @@ broadcast's own `model.safetensors.index.json`. Saved as `~/prime-intellect/mode
 The supported route (found 2026-11-09, prime-rl commit cbd3702): `uv run python tools/convert_dcp_to_bf16.py <run>/checkpoints/step_N`
 → `<run>/checkpoints/step_N/weights` with config.json + tokenizer + safetensors, loadable by `uv run inference --vllm.model`.
 SFT runs never write HF weights or broadcasts (broadcasts exist only for online eval and need a live receiver), so for SFT
-this converter is the *only* export path; a `[ckpt]` block (even empty) is what makes the final DCP save happen. The
+this converter is the *only* export path; a `[ckpt]` block (even empty) is what makes the final DCP save happen. Second half of
+the converter bug: with `_tied_weights_keys` None the tied `lm_head.weight` is never dropped, so the export carries a duplicate of
+`embed_tokens`. vLLM loads it anyway; mlx-lm refuses ("parameters not in model: language_model.lm_head.weight"). Proper fix for the
+tool: pop `lm_head.weight` when `tie_word_embeddings`; local fix for an existing export: drop the tensor from its shard + index. The
 broadcast-assembly trick above is only for RL runs, where `broadcasts/step_N` already exists.
 Breakdown (prime-rl eval metrics): origin 0.524, contains 0.510, primary_depth **1.32** (gold ≈ 2.6), influence_pred **0.0**,
 evidence_coverage 1.00, unsupported_evidence 0.05, gate_fail 0.7%, unknown_classes 0.016, response ~190 chars.
