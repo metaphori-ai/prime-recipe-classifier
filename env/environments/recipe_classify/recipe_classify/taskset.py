@@ -59,8 +59,19 @@ def system_prompt(tax: Taxonomy) -> str:
     classes = [c for c in tax.contains_classes]
     return f"""You classify recipes against a fixed taxonomy. Reply with ONLY a JSON object inside <answer></answer> tags.
 
-ORIGIN. Give exactly one "primary" path: the culinary tradition that owns the dish's FORM and technique. Optionally up to two
-"influence" paths for a borrowed FLAVOR SYSTEM (e.g. a burger with bulgogi marinade: primary American, influence Korean).
+ORIGIN. Give exactly one "primary" path: the culinary tradition that owns the dish's FORM and technique. Optionally up to three
+"influence" paths for a borrowed FLAVOR SYSTEM (e.g. a burger with teriyaki glaze: primary American, influence Japanese).
+FUSION is DISH x DISH: primary is "Global" > "Fusion" and BOTH traditions are influences when a finished dish from one tradition
+sits inside a dish or form from another, each THERE AS ITSELF: bulgogi in tacos, birria in ramen, sisig on pizza, tikka masala in
+tacos, makhani sauce on pasta, carbonara tteokbokki. Test: could you lift the second dish out and serve it as that dish?
+A seasoning, rub, marinade, sauce or topping is NOT a second dish, even when it is named after one: jerk, al pastor, teriyaki,
+tandoori, "banh mi" toppings, a bulgogi-marinated burger patty, gochujang in carbonara, kimchi in mac and cheese, za'atar on
+focaccia. Those are the dish's owner + 1 influence (a burger however dressed is American + influence).
+In a Fusion label name each parent at its national node: pizza and pasta -> "Italian", taco -> "Mexican", burger -> "American".
+The two traditions must be DIFFERENT traditions: a mix inside one tradition (Cajun x Lowcountry, Sichuan x Cantonese, taco pizza =
+Tex-Mex x Italian-American) is not Fusion; give the tradition they share ("Southern US", "Chinese", "American").
+Where a fusion was invented does not matter. A dish a cuisine has absorbed as its own (tonkatsu, budae jjigae, Japanese curry)
+belongs to that cuisine with NO influence.
 Named fusion traditions (Anglo-Indian, Tex-Mex, Chifa, Nikkei, Indo-Chinese, American Chinese, Italian-American, Cape Malay) are
 their own nodes — use the node, not an influence pair. Stop at the deepest node the recipe SUPPORTS; do not guess a region from one
 ingredient. Pan-national restaurant idiom -> the national node.
@@ -70,11 +81,11 @@ CONVENTIONS (follow these over your own instinct):
   crock pot, copycat chain recipes, generic casseroles, muffins, cookies, bars, dips, burgers, sloppy joes, BBQ sauce, coleslaw.
   "Italian seasoning"/cream pasta/chicken parm/marinara/pizza bombs -> "Italian-American", NOT "Italian". Teriyaki chicken with
   honey and cornstarch -> "American" with influence "Japanese". A roux-and-curry-powder dish -> "Anglo-Indian", not "Indian".
-- "Unplaced" > "Contemporary" ONLY when no tradition owns the FORM at all: grain/protein bowls, smoothies, mug cakes, energy bars,
+- "Global" > "Contemporary" ONLY when no tradition owns the FORM at all: grain/protein bowls, smoothies, mug cakes, energy bars,
   keto/vegan substitutes. An ordinary American home recipe is "American", never "Contemporary". Contemporary is about the FORM,
   not the country: gluten-free/keto/vegan substitute bakes, microwave and mug meals, grain or protein bowls, smoothies and
   overnight oats are "Contemporary" even when every ingredient is American pantry. Dips, casseroles, sheet cakes, slow-cooker
-  dishes are "American" however modern their ingredients. "Unplaced" > "Foundational" =
+  dishes are "American" however modern their ingredients. "Global" > "Foundational" =
   bare building blocks (plain rice, fried eggs, stock).
 - Tandoori chicken, butter chicken (murgh makhani), chole/chhole, aloo gobi, bhindi masala, roti -> "South Asian" > "Punjabi".
   Dal fry, korma, malai kofta, saag aloo -> "South Asian" > "Indian" > "North Indian". Biryani/haleem/double ka meetha ->
@@ -88,7 +99,8 @@ Every path must be an exact sequence of node names from this tree (indentation =
 
 CONTAINS. List every ingredient class present. Positive facts only; absence is never stated. Classes:
 {", ".join(classes)}
-Rules: optional / garnish / "A or B" alternatives COUNT as present. Explicit vegan/vegetarian/X-free qualifiers NEGATE the class
+Rules: optional ingredients and garnishes COUNT as present. For "A or B", the FIRST-named ingredient counts; a substitute the cook
+may choose instead does not ("anchovy broth (or beef or chicken stock)" is fish only; "lard or vegetable shortening" is pork). Explicit vegan/vegetarian/X-free qualifiers NEGATE the class
 ("vegan worcestershire" is not fish). Soy sauce = gluten AND soy unless tamari/gluten-free. Nutmeg is not a nut; coconut is not a nut;
 flavor extracts are not alcohol; cooking wine, mirin, sake, beer ARE alcohol. An ingredient named in the TITLE counts even if the list
 omits it. If the ingredient list is missing or hides contents behind placeholders, include "incomplete". For each class you list,
@@ -215,8 +227,9 @@ class RecipeClassifyTask(vf.Task[RecipeData]):
 
 
 class RecipeClassifyConfig(vf.TasksetConfig):
-    dataset_path: str = str(Path(__file__).resolve().parents[4] / "data" / "dataset" / "eval.jsonl")
-    """JSONL from recipe_tax.build_dataset (eval.jsonl for evaluation, train.jsonl for RL)."""
+    dataset_path: str = str(Path(__file__).resolve().parents[4] / "data" / "dataset_v04" / "eval.jsonl")
+    """JSONL from recipe_tax.build_dataset (eval.jsonl for evaluation, train.jsonl for RL). Default = the taxonomy 0.4.0 gold;
+    data/dataset, dataset_dsv4 and dataset_sonnet are frozen at taxonomy 0.3.3 ("Unplaced") and kept as the record of days 1-2."""
     taxonomy_path: str | None = None
     """Override taxonomy.yaml location (defaults to the project root copy)."""
     publishable_only: bool = False

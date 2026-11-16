@@ -27,7 +27,7 @@ def test_dietary_lattice_and_free_filters():
     assert "pescatarian" in s2 and "vegetarian" not in s2 and "contains_seafood" in s2
 
 def test_incomplete_makes_no_absence_claims():
-    s = derive(tax, P("Unplaced", "Contemporary"), ["dairy", "incomplete"])
+    s = derive(tax, P("Global", "Contemporary"), ["dairy", "incomplete"])
     assert "unknown" in s and "incomplete" in s and not any(x.endswith("-free") for x in s)
 
 def test_kosher_combination_rule():
@@ -41,7 +41,7 @@ def test_origin_partial_credit_near_miss():
     exact = score_origin(tax, gold, gold)
     near = score_origin(tax, gold, P("South Asian", "Indian", "North Indian"))   # shares south_asian + country:india
     far  = score_origin(tax, gold, P("European", "French"))
-    unpl = score_origin(tax, gold, P("Unplaced", "Foundational"))
+    unpl = score_origin(tax, gold, P("Global", "Foundational"))
     assert exact > near > far == unpl == 0.0
 
 def test_contains_recall_weighted():
@@ -120,3 +120,27 @@ def test_null_uncertain_and_malformed_shapes_do_not_raise():
     ):
         r = score(tax, gold, bad, ["butter"])          # must return, never raise
         assert 0.0 <= r["reward"] <= 1.0
+
+
+def test_v3_fusion_and_influence_scoring():
+    tax = Taxonomy.load()
+    def O(prim, *infl): return [{"path": list(prim), "role": "primary"}] + [{"path": list(i), "role": "influence"} for i in infl]
+    F, KO, MX, AM, JP = ("Global", "Fusion"), ("East Asian", "Korean"), ("Latin American & Caribbean", "Mexican"), ("North American", "American"), ("East Asian", "Japanese")
+    gold = O(F, KO, MX)                                    # bulgogi tacos
+    full, one, bare, old = (score_origin(tax, gold, x) for x in (O(F, KO, MX), O(F, KO), O(F), O(AM, KO)))
+    assert full == 1.0 and full > one > bare               # the parents are the answer; bare "Fusion" is worth little
+    assert bare <= 0.35 and 0.15 < old < one               # old-convention answer keeps partial credit, below Fusion + one parent
+    assert score_origin(tax, gold, O(F, MX, KO)) == 1.0    # influence order does not matter
+    g2 = O(AM, JP)                                         # teriyaki burger: owner + influence
+    wrong_side = score_origin(tax, g2, O(F, AM, JP))
+    assert wrong_side == 0.5                               # same two parents, wrong side of the line: half credit
+    assert score_origin(tax, g2, O(F, KO, MX)) < 0.2       # wrong parents get nothing from the boundary rule
+    g3 = O(AM)                                             # plain American dish
+    assert abs(score_origin(tax, g3, O(AM, JP)) - 0.8) < 1e-9          # spurious influence costs 0.2
+    assert score_origin(tax, g3, O(F, AM, JP)) < 0.5 < score_origin(tax, g3, O(AM, JP))   # calling everything Fusion never pays
+    assert score_origin(tax, g2, O(AM)) < score_origin(tax, g2, O(AM, JP)) == 1.0          # a missed influence still costs
+
+def test_unplaced_alias_rescoring():
+    from recipe_tax.scoring import resolve_path
+    tax = Taxonomy.load()
+    assert resolve_path(tax, ["Unplaced", "Contemporary"]) == (("Global", "Contemporary"), 1.0)

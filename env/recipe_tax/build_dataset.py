@@ -109,6 +109,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("--cap-primary", type=int, default=0, help="max train records per primary path (0 = no cap)")
     ap.add_argument("--teacher", default=None, help="use origin_silver_<teacher>.jsonl alone, no agreement gate (e.g. dsv4)")
     ap.add_argument("--out-dir", default=None, help="write dataset to this dir instead of data/dataset (keeps the frozen set intact)")
+    ap.add_argument("--extra-gold", action="append", default=[], help="another reviewed set under data/<name>/gold.jsonl: kept out of train, written to eval_<name>.jsonl")
     a = ap.parse_args(argv)
     if a.out_dir: OUT = Path(a.out_dir)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -117,8 +118,14 @@ def main(argv=None) -> int:
         for r in read_jsonl(f): raw[r["id"]] = r
     gold = {g["id"]: g for g in read_jsonl(GOLD)}
     jev = {j["id"]: j for j in read_jsonl(JEV_FULL)} or {j["id"]: j for j in read_jsonl(JEV_CAND)}
+    for f in sorted((ROOT / "data" / "silver").glob("contains_jev_extra_*.jsonl")):          # later Jev batches (e.g. the sourced set)
+        for j in read_jsonl(f): jev.setdefault(j["id"], j)
+    extra = {name: {g["id"]: g for g in read_jsonl(ROOT / "data" / name / "gold.jsonl")} for name in a.extra_gold}
+    for name, g in extra.items():
+        if not g: raise SystemExit(f"--extra-gold {name}: data/{name}/gold.jsonl is missing or empty")
     osilver, teacher_note = load_origin_silver(a.teacher)
-    gold_keys = {content_key(raw[i]) for i in gold if i in raw}
+    held_out = set(gold) | {i for g in extra.values() for i in g}                              # never trained on
+    gold_keys = {content_key(raw[i]) for i in held_out if i in raw}
 
     def record(rid: str, labels: dict, split: str, labeled_by: str) -> dict:
         r = raw[rid]
@@ -130,7 +137,7 @@ def main(argv=None) -> int:
     ev = [record(i, g["labels"], "eval", "human") for i, g in gold.items() if i in raw]
     tr = []; skipped = collections.Counter()
     for rid, r in raw.items():
-        if rid in gold: skipped["gold id"] += 1; continue
+        if rid in held_out: skipped["gold id"] += 1; continue
         if content_key(r) in gold_keys: skipped["content-duplicate of gold"] += 1; continue
         j = jev.get(rid)
         if not j: skipped["no jev"] += 1; continue
@@ -142,10 +149,11 @@ def main(argv=None) -> int:
 
     capped = {}
     if a.cap_primary: tr, capped = cap_by_primary(tr, a.cap_primary)
-    for name, rows in (("eval", ev), ("train", tr)):
+    ev_extra = {name: [record(i, g["labels"], "eval", "human") for i, g in gs.items() if i in raw] for name, gs in extra.items()}
+    for name, rows in (("eval", ev), ("train", tr), *((f"eval_{n}", r) for n, r in ev_extra.items())):
         with open(OUT / f"{name}.jsonl", "w", encoding="utf-8") as f:
             for r in rows: f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    man = {"eval": len(ev), "train": len(tr), "skipped": dict(skipped), "origin_silver": teacher_note, "cap_primary": a.cap_primary, "capped_dropped": capped, "publishable_train": sum(r["publishable"] for r in tr),
+    man = {"eval": len(ev), **{f"eval_{n}": len(r) for n, r in ev_extra.items()}, "train": len(tr), "skipped": dict(skipped), "origin_silver": teacher_note, "cap_primary": a.cap_primary, "capped_dropped": capped, "publishable_train": sum(r["publishable"] for r in tr),
            "publishable_eval": sum(r["publishable"] for r in ev), "sources": dict(collections.Counter(source_key(r["id"]) for r in ev + tr))}
     json.dump(man, open(OUT / "manifest.json", "w"), indent=1)
     print(json.dumps(man, indent=1))

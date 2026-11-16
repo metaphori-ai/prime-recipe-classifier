@@ -1,0 +1,36 @@
+# SIZE TEST: same Phase 3 data, schedule and learning rate as sft-2b-v04.toml; only the model changes (2B -> 4B).
+# Question: does origin on the hard set (regional node choice, fusion) improve with model size alone?
+#   uv run sft @ ~/prime-intellect/env/environments/recipe_classify/configs/sft-4b-v04.toml --no-monitors.prime
+# Export:  uv run python tools/convert_dcp_to_bf16.py outputs/<run>/checkpoints/step_340
+#          ln -sfn ~/prime-rl/outputs/<run>/checkpoints/step_340/weights ~/prime-intellect/models/sft-4b-v04
+# THINKING: prime-rl's renderer defaults thinking ON for Qwen3.5-4B and larger. It is switched off in [renderer] below so the
+# training text matches a thinking-off evaluation. After export, check eval output tokens (mean ~65, max < 200); if answers
+# run to 400 the served chat template still has thinking on.
+mode = "sft"
+max_steps = 340                       # 5,486 rows / batch 32 ≈ 171 steps per epoch → ~2 epochs
+
+[ckpt]                                # present with no interval => ONE checkpoint, at the last step. Each 2B SFT checkpoint was ~25 GB
+                                      # (4 of them filled a 200 GB disk on 2026-11-16); a 4B one will be about double.
+
+[model]
+name = "Qwen/Qwen3.5-4B"
+
+[data]
+name = "/home/ubuntu/prime-intellect/data/sft_v04"        # local dir: train.jsonl + valid.jsonl, `messages` column
+seq_len = 4096
+batch_size = 32
+micro_batch_size = 8                                # 2B used 37 GB at this setting; expect roughly double for 4B (fits a free H200)
+
+[optim]
+lr = 1e-5                                           # full FT of a 2B; the 0.6B example uses 2e-5
+
+[monitors.wandb]
+project = "recipe-classify"
+name = "4b-sft-v04"
+
+[deployment]
+num_train_gpus = 1
+
+[renderer]
+name = "qwen3.5"
+enable_thinking = false

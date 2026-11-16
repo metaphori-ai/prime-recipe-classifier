@@ -6,7 +6,16 @@ W_ORIGIN, W_CONTAINS = 0.55, 0.45
 W_PRIMARY, W_INFL = 0.6, 0.4
 FN_COST, FP_COST = 2.0, 1.0           # v2: FP 0.5→1.0 — at 0.5, listing every class beat an honest partial answer           # a missed class costs 4x a spurious one
 INCOMPLETE_FLAT = 0.5  # v2: only when GOLD also says incomplete; a false "incomplete" scores 0 (was a free floor)
-MAX_INFLUENCES = 2
+MAX_INFLUENCES = 3   # 0.4.0: Fusion carries both parents, occasionally a third
+REWARD_VERSION = "v3"
+# v3 (taxonomy 0.4.0). Three changes to origin, none to contains:
+W_PRIMARY_FUSION, W_INFL_FUSION = 0.3, 0.7   # gold primary is Global > Fusion: the two parents ARE the answer, the word "Fusion" is not
+SPURIOUS_INFL_COST = 0.2   # gold has no influence, pred adds one: was 0.4 (same as missing one). At 0.4 with ~7% of recipes carrying
+                           #   an influence, staying silent was the best policy: arm D found 8 of 32. Still net-negative to add one everywhere.
+BOUNDARY_CREDIT = 0.5      # exactly one side says Fusion: the dish x dish line is a judgment call, so naming the right parents on
+                           #   the wrong side of it earns up to half credit instead of ~0.2
+FUSION = ("Global", "Fusion")
+PATH_ALIASES = {"Unplaced": "Global"}        # pre-0.4.0 name; lets saved predictions from earlier arms be re-scored unchanged
 
 def _jaccard(a: set, b: set) -> float:
     return len(a & b) / len(a | b) if (a | b) else 1.0
@@ -26,7 +35,7 @@ MAX_CONTAINS = 10                      # v2: more than this many classes is spam
 def resolve_path(tax: Taxonomy, path) -> tuple[tuple | None, float]:
     """Exact path -> (path, 1.0). Otherwise, if the given sequence is the unique suffix of one node's path, resolve to it at
     RESOLVE_DISCOUNT. Unresolvable -> (None, 0.0). Soft gate: vocabulary slips cost, they don't zero the answer."""
-    t = tuple(str(x) for x in (path or []))
+    t = tuple(PATH_ALIASES.get(str(x), str(x)) for x in (path or []))
     if not t: return None, 0.0
     if tax.validate_path(t) is None: return t, 1.0
     cands = [p for p in tax.nodes if p[-len(t):] == t] if len(t) <= 4 else []
@@ -92,8 +101,19 @@ def score_origin(tax: Taxonomy, gold: list[dict], pred: list[dict]) -> float:
     gi = set().union(*[tax.satisfaction_set(x) for x in _influences(gold)]) if _influences(gold) else set()
     pi = set().union(*[tax.satisfaction_set(x) for x in _influences(pred)]) if _influences(pred) else set()
     if not gi and not pi:
-        return primary                      # no influences on either side: primary is the whole score.
-    return W_PRIMARY * primary + W_INFL * _jaccard(gi, pi)   # spurious or missing influences cost the 0.4 term
+        base = primary                      # no influences on either side: primary is the whole score.
+    elif not gi:
+        base = primary * (1.0 - SPURIOUS_INFL_COST)           # v3: an unasked-for influence costs 0.2, not 0.4
+    else:
+        wp, wi = (W_PRIMARY_FUSION, W_INFL_FUSION) if g == FUSION else (W_PRIMARY, W_INFL)
+        base = wp * primary + wi * _jaccard(gi, pi)           # a missed or wrong influence costs the influence term
+    if (g == FUSION) != (p == FUSION):                        # v3: right parents, wrong side of the dish x dish line
+        def parents(o):
+            ps = [x for x in ([_primary(o)] + _influences(o)) if x and x != FUSION]
+            return set().union(*[tax.satisfaction_set(x) for x in ps]) if ps else set()
+        pg, pp = parents(gold), parents(pred)
+        if pg and pp: base = max(base, BOUNDARY_CREDIT * _jaccard(pg, pp))
+    return base
 
 def check_evidence(pred: dict, ingredients: list[str], gold: set[str] | None = None, traps: dict | None = None) -> set[str]:
     """v2. Return the contains classes whose claim is DROPPED for ungrounded evidence.

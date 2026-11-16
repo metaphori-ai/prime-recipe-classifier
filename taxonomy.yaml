@@ -11,7 +11,8 @@
 #     follow the file, not instinct — gold agreement is the ceiling on reward.
 #   - Named diaspora/fusion traditions (Anglo-Indian, Nikkei, Tex-Mex, Indo-Chinese, American Chinese …) are
 #     nodes, filed under the HOST tradition (whose table they are eaten at), with the source culture in `c`.
-#     Un-named fusion (gochujang ribs) uses the primary/influence roles instead.
+#     Un-named mixes: one dish + a borrowed seasoning (gochujang ribs) = owner + influence;
+#     two named dishes from two traditions (bulgogi tacos) = Global > Fusion + both as influences.
 #   - Depth is variable: macro > tradition [> macro-region] > region. The macro-region tier
 #     exists only where it carries real information (Indian, Chinese, Italian, Mexican, American).
 #   - "unknown" is a legal origin. `contains` may include "incomplete".
@@ -25,7 +26,7 @@
 #     _c: [Country, ...]       # country metadata for this branch; children inherit unless overridden
 #     Child: ...
 
-version: 0.3.3  # + named diaspora nodes (Anglo-Indian, Indo-Chinese, American Chinese, Italian-American); host-table convention
+version: 0.4.0  # Unplaced renamed Global; + Global > Fusion (dish x dish, both traditions as influences); influence cap 2 -> 3
 
 origin:
   South Asian:
@@ -314,14 +315,23 @@ origin:
     New Zealand: {c: [New Zealand]}
     Polynesian: {c: [Samoa, Tonga, Fiji]}
 
-  Unplaced:                     # not a tradition; two honest reasons a dish has no origin
-    _c: []
+  Global:                       # owned by no single tradition (was "Unplaced" before 0.4.0). NOT "eaten everywhere":
+    _c: []                      #   however widely a dish has spread, if it has a home it goes home (pizza is not Global).
     Foundational:               # building blocks every tradition shares: plain rice, stock, boiled eggs,
                                 #   roasted vegetables, simple dressed greens. Mostly a dish-type signal.
     Contemporary:               # modern cooking with no identifiable parent: grain bowls, smoothie bowls,
-                                #   "meal prep", internet-era dishes. A real category, not a failure.
-    # Reward note: neither shares ancestry with any real tradition, so predicting them for a dish with a
-    # recoverable origin scores 0 — a wrong guess in the right neighborhood already beats them.
+                                #   "meal prep", internet-era dishes. At most ONE borrowed flavour system as an influence.
+    Fusion:                     # (clarified 2026-11-15 after the Sonnet smoke test: each dish must be THERE AS ITSELF; a
+                                #   seasoning, marinade or topping named after a dish — jerk, al pastor, banh mi toppings,
+                                #   a bulgogi-marinated patty — is a seasoning: owner + 1 influence.)
+    Fusion:                     # DISH x DISH: two named dishes/forms from two traditions collide (bulgogi tacos, birria
+                                #   ramen, sisig pizza). Always carries BOTH traditions as influences (2, at most 3).
+                                #   The two must be DIFFERENT traditions: a mix inside one tradition (Cajun x Lowcountry,
+                                #   Sichuan x Cantonese, taco pizza) is not Fusion; label the tradition node they share.
+                                #   Where it was invented does not matter. One dish + a borrowed seasoning or ingredient
+                                #   (teriyaki burger, gochujang carbonara) is NOT Fusion: owner + 1 influence.
+    # Reward note: none of these shares ancestry with any real tradition, so predicting them for a dish with a
+    # recoverable origin scores 0 on primary — a wrong guess in the right neighborhood already beats them.
     # Watch their emission rate in trajectories; do not add an extra penalty (pushes toward confabulation).
 
 # ---------------------------------------------------------------------------

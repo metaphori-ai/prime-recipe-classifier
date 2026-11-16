@@ -106,13 +106,175 @@ so the table mildly overfits the 439; a held-out slice would make the choice cle
 
 > We may revisit the gold varieties and increase fusion recipe % and more diversity to see if that creates overfitting/memorization or generalization.
 
+# Phase 3
+
+## Taxonomy Depth
+
+The next phase of training and reward will involve training depth recognition so that hierarchical categories in the taxonomy are met. For instance instead of stopping at two levels, `South Asian > Indian`, a dish like `Galouti Kebab` would be 4 levels: `South Asian > Indian > North Indian > Awadhi`.
+
+## New High Level Taxonomy
+
+There is ambiguity between `American | Contemporary | Fusion`. There was also a top level category called Unplaced which meant it doesn't have a deep cultural origin, but we didn't like this label so we changed `Unplaced -> Global`. `Foundational`, `Contemporary` and the new `Fusion` are one level down from Global.
+
+We decided that Fusion isn't a primary dish + influence (like Bulgogi Burgers is American + Korean Influence in ingredients only) instead it must be a `Dish x Dish` which means two different dishes fused together like Chicken Tikka Pesto Penne (Global > Fusion || Italian + Indian influences). In the latter case it is a cross between two Dishes, not just adding an ingredient (like gochujang) or a marinade, but rather two dishes "Fused" together, each still there as itself. The test: could you lift the second dish out and serve it on its own?
+
+Fusion, Contemporary and American is the perfect blurred area that can illuminate the training, training reward, and consistency/inconsistency that we are trying to train through our taxonomy rules. 
+
+## Phase 3 Dataset
+
+| | Day 2 | Phase 3 |
+|---|---|---|
+| Training recipes | 5,066 | 5,774 |
+| Test recipes, original gold | 439 | 439 |
+| Test recipes, hard set (fusion, ownership, regional depth) | none | 224 |
+| Training labels with a `Fusion` primary | 0 | 29 |
+| Training labels with an influence | 148 | 207 |
+| Training labels three levels deep or more | 2,157 | 2,671 |
+
+Both gold sets are held out of training. The hard set and the newly sourced recipes are not redistributable, so they are not in this repo.
+
+## Baseline before training
+
+Before training anything new we scored the day-2 fine-tune (B″, full fine-tune on Sonnet labels) on the hard set, so Phase 3 has something to beat. Same weights, same sampling, same scorer. The hard set ran on the Mac (MLX) and the original gold on the pod (vLLM); the two stacks agree within noise on the 439 (0.817 vs 0.821).
+
+| | Hard set (224), on the Mac | Original gold (439), on the pod |
+|---|---|---|
+| Overall reward | 0.735 | 0.821 |
+| Origin | 0.607 | 0.727 |
+| Contains | 0.892 | 0.937 |
+| Exact origin match | 45% | 63% |
+
+The hard set by the kind of recipe:
+
+| Slice | Recipes | Origin score | Exact match |
+|---|---|---|---|
+| Un-named fusion | 30 | 0.285 | 13% |
+| Ownership cases (adapted abroad, rewrites, two claimants) | 108 | 0.640 | 55% |
+| Regional depth (one recipe per thin regional node) | 86 | 0.679 | 44% |
+
+What the baseline says:
+
+- **Fusion is where the old model fails outright.** It never answers `Fusion` (0 of 10) and offers an influence on 7 recipes where gold has 45.
+- **Depth is not the problem we assumed.** Its answers are as deep as gold on average (2.65 levels vs 2.63). On the regional recipes it was exact on 38, stopped short on 17, and on 18 went to the right depth but picked the wrong node. The weakness is choosing the right region, more than daring to go deep.
+- **The taxonomy and reward change did not move the old numbers.** Re-scoring the saved day-2 answers under taxonomy 0.4.0 and reward v3 gives B″ 0.821 and D 0.857, the same as recorded, so Phase 3 can be compared directly on the original 439.
+
+What we expect from Phase 3, written down before the run:
+
+- **Original 439:** about level with D (0.857), within the ~0.02 noise band. Those labels barely changed.
+- **Hard set:** a clear gain over 0.735, mostly from fewer wrong-region answers and from `Fusion` being answered at all.
+- **Influences:** more of them offered than D's 11, because reward v3 charges less for a wrong guess.
+
+One caution on reading the result: a single evaluation of 439 recipes has about ±0.013 of sampling noise, more on 224, and much more on the 30 fusion recipes. Only large moves on the small slices mean anything.
+
+
+## Phase 3 results
+
+One fine-tune on the Phase 3 data, then 80 steps of GRPO from it with reward v3. Same schedule as arm D, so the differences are the labels, the data and the reward.
+
+| Model | Original 439: reward | origin | exact | Hard 224: reward | origin | exact |
+|---|---|---|---|---|---|---|
+| B″, day-2 fine-tune | 0.821 | 0.727 | 63% | 0.735 | 0.607 | 45% |
+| D, day-2 GRPO | 0.849 | 0.749 | 64% | 0.765 | 0.641 | 47% |
+| Phase 3 fine-tune | 0.821 | 0.728 | 63% | 0.738 | 0.634 | 47% |
+| **E, Phase 3 GRPO** | 0.837 | 0.739 | 66% | **0.786** | **0.696** | **53%** |
+
+Origin on the hard set, by kind of recipe:
+
+| Slice | D | E |
+|---|---|---|
+| Ownership cases (108) | 0.685 | 0.73 |
+| Un-named fusion (30) | 0.317 | 0.47 |
+| Regional depth (86) | 0.698 | 0.73 |
+
+What moved:
+
+- **The hard set, on origin.** +0.055 over D and +0.09 over the day-2 fine-tune. The hard set was evaluated twice and the two runs agree to 0.001 on reward.
+- **Influences.** E matches a gold influence exactly on 15 to 20 of the 45 hard recipes that have one; D matched 6. It adds one where gold has none once.
+- **Fusion.** E answers `Fusion` 6 times on the hard set (3 right, 3 wrong; gold has 10) and finds all 3 on the original gold with the right parents. No earlier model ever answered it.
+
+What did not:
+
+- **The original 439 is level with D** (0.837 vs 0.849), as predicted before the run. The gap is in `contains` (0.956 vs 0.971); origin is within noise and exact match is 2 points higher.
+- **The fine-tune alone did not beat the day-2 fine-tune on reward.** It gained on origin and lost the same amount on `contains`. The GRPO stage recovered most of that.
+
+What we learned about the method:
+
+- **The in-training score misled us.** The 150-recipe gold sample logged every 10 steps moved from 0.868 to 0.872 over the run, which looked like nothing. The full evaluation shows +0.06 origin on the hard set. A sample drawn only from the easy set, blending both reward terms, cannot see where the model is improving.
+- **This model has two jobs and one of them belongs elsewhere.** `contains` is handled better by a dedicated system. Phase 4 drops it from the fine-tune and the reward and trains origin only.
+
+### How the gain arrived
+
+The same hard-set evaluation, run on weights saved during the GRPO stage:
+
+| GRPO step | Hard 224: reward | origin |
+|---|---|---|
+| 0 (the Phase 3 fine-tune) | 0.738 | 0.634 |
+| 60 | 0.776 | 0.682 |
+| 70 | 0.775 | 0.677 |
+| 80 | 0.786 | 0.696 |
+
+Most of the gain is in by step 60. Step 70 to 80 still adds 0.019 on origin, almost all of it on the ownership recipes (64 to 70 exact of 108), against a repeatability of about 0.002 for this evaluation. The model was still improving when the run stopped, so 80 steps was too short. `Fusion` is the exception: the model answers it 6 times (3 right) at all three steps, and the fusion slice peaked at step 60.
+
+### What broke on the way
+
+Three failures, none of them about the model. Each cost time, and each is now a rule in the setup scripts.
+
+- **Disk.** On prime-rl `4c12d15` a trainer checkpoint for the 2B model is about 25 GB. The fine-tune kept four and the first GRPO checkpoint filled a 200 GB disk at step 20. The disk had been sized from day 2, when a whole run took 33 GB. Fix: `--trainer.ckpt.keep-last 1`, and one final checkpoint for the fine-tune.
+- **Lost weights.** Enlarging the disk on the rented pod restarted it and erased everything on the local disk, including the finished fine-tune, which had not been copied off yet. The fine-tune was rerun (it is seeded, and the losses matched to three decimals). Fix: every finished artefact goes to the persistent volume and to a second machine as soon as it exists.
+- **Memory at start-up.** Continuing the run from step 80 was killed twice. The cause was container RAM. The environment config uses `runtime.type = "subprocess"`, which starts one Python process per attempt in flight. While the trainer is busy with its slow first step, the dispatcher raises concurrency to about 4,350, and we counted 4,536 Python processes holding about 256 GiB against a 251 GB limit. The 80-step run had passed through the same spike with slightly fewer in flight. Next run: cap the number of attempts in flight and watch RAM through the first step. The continuation to 120 steps was not completed.
+
+# Phase 4 (plan, written before the run)
+
+**Question.** Does the 2B model get better at origin and influences when that is its only job?
+
+In the product, `contains` comes from a dedicated classifier (TypeSafe Jev, 0.99 against gold). The 2B model does not need to produce it. Phase 3 gave one hint that the two jobs compete: the Phase 3 fine-tune gained on origin and lost the same amount on `contains`. Phase 4 tests that directly.
+
+**What changes, and only this:**
+
+| | Phase 3 (arm E) | Phase 4 |
+|---|---|---|
+| Model answer | origin, contains, evidence | origin only |
+| Instructions | origin rules, taxonomy tree, contains rules | origin rules and taxonomy tree, word for word; contains rules removed |
+| Reward | 0.55 origin + 0.45 contains | origin (same v3 function) |
+| Recipes, origin labels, taxonomy | Phase 3 | the same |
+| Base model, learning rates, batch, temperature | arm E | the same |
+
+**Data.** Nothing from days 1, 2 or Phase 3 is edited or removed. Phase 4 gets its own copy (`data/dataset_p4_origin/`, `data/sft_p4_origin/`) built from the Phase 3 files, with the `contains` labels left out of the copy. The environment gains a `mode` setting (`full` by default, `origin` for Phase 4), so every earlier config still runs as it did.
+
+**Runs.**
+
+1. Fine-tune 2B on the origin-only copy, same schedule as Phase 3 (340 steps).
+2. GRPO from it for 160 steps, saving weights at 60, 80, 100, 120, 140 and 160.
+3. The same two steps at 4B, only if the 2B result is clear.
+
+**How it is judged.** On origin only, on both gold sets: origin score, exact match, the three hard-set slices, influences found, `Fusion` found. The comparison with arm E is made at **step 80**, where the two runs differ in one thing. Steps beyond 80 answer the separate question of what a longer run adds. The final step is fixed in advance at 160; the hard set is not used to pick a checkpoint.
+
+The in-training evaluation changes too: it reads the hard set as well as a sample of the original gold, and logs origin alone, so the curve shows what Phase 3's could not.
+
+For a product-level number, the combined system is scored as Phase 4 origin plus Jev's `contains` under the Phase 3 reward, which is directly comparable with arm E's 0.786 and 0.837.
+
+**Numbers to beat (arm E, origin):**
+
+| | Original 439 | Hard 224 |
+|---|---|---|
+| Phase 3 fine-tune | 0.728 | 0.634 |
+| E, step 80 | 0.739, 66% exact | 0.696, 53% exact |
+
+**Expectations, written down before the run:**
+
+- **Fine-tune alone:** hard-set origin at or a little above 0.634. A fine-tune only imitates the labels, and the labels have not changed.
+- **GRPO at step 80:** hard-set origin above 0.696. This is where the effect should show, because the whole reward, and so the whole training signal, is now about origin. In arm E a group of eight attempts could be ranked by an allergen slip.
+- **A gain under 0.02 counts as no effect.** One evaluation repeats to about 0.002, but we have never measured how much two training runs differ, and it is certainly more than that.
+- **Risk we expect to see:** more groups where all eight attempts score the same and teach nothing. That share rose from 18% to 38% during arm D with two reward terms; with one term it should be higher. If it passes about half, the next change is a larger group or a higher sampling temperature.
+- **If nothing moves,** the two jobs were not competing at this size, and a single model doing both costs nothing. That is a result too.
+
 ## Layout
 
 ```
-taxonomy.yaml                     245 origin nodes, 20 contains classes, derived diets, ingredient traps
+taxonomy.yaml                     246 origin nodes, 20 contains classes, derived diets, ingredient traps
 env/recipe_tax/                   scoring (reward), lexicon, taxonomy loader, dataset build, SFT prep, teacher labeling
 env/environments/recipe_classify/ verifiers v1 Taskset/Task; configs/ (vf-run local/ollama/mlx, prime-rl rl/sft/eval)
-env/tests/                        12 tests on the reward
+env/tests/                        14 tests on the reward
 scripts/                          pod setup/sync (driver, GPU, port, NCCL gotchas scripted), eval runners, this export
 data/                             publishable subset only (see Data)
 LOG.md / TRAINING.md / TAXONOMY.md / OVERVIEW.md / PLAN.md
@@ -127,6 +289,9 @@ LOG.md / TRAINING.md / TAXONOMY.md / OVERVIEW.md / PLAN.md
   (`CUDA_VISIBLE_DEVICES=0,0`, filesystem weight broadcast); the B″ full fine-tune (`prime-rl sft`, 33 min) and its
   439-recipe eval through vLLM; arm D. The SFT trainer saves DCP checkpoints only — `tools/convert_dcp_to_bf16.py`
   produces the HF directory vLLM and arm D load.
+- **Rented 1× H200 (RunPod), Phase 3**: the Phase 3 fine-tune (`prime-rl sft`, 36 min), arm E (80 GRPO steps, about
+  75 s per step) and every Phase 3 evaluation through vLLM. Prime's own H200 pods were stuck in set-up that day. No
+  credentials were shipped to the third-party pod, so every command there carries `--no-monitors.prime`.
 - **Hosted APIs**: Prime Inference for the first two origin teachers (DeepSeek V4, Qwen3.6-35B); Anthropic API for the
   Sonnet 5.5 teacher (native Messages API with prompt caching: 98% of the 40M relabel input tokens were cache reads); TypeSafe Jev for `contains` labels.
 
@@ -147,7 +312,14 @@ uv run sft @ env/environments/recipe_classify/configs/sft-2b-sonnet.toml --no-mo
 uv run python tools/convert_dcp_to_bf16.py outputs/<run>/checkpoints/step_320      # -> .../step_320/weights
 # GRPO on one GPU with prime-rl (see configs/rl-2b.toml comments for the single-GPU flags):
 CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl-2b.toml --inference.vllm.gpu-memory-utilization 0.45
+# Phase 3 on prime-rl 4c12d15 (flag names changed since day 2; each trainer checkpoint is ~25 GB, hence keep-last):
+uv run sft @ env/environments/recipe_classify/configs/sft-2b-v04.toml --no-monitors.prime
+CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl-2b-v04.toml --deployment.num-train-gpus 1 \
+  --deployment.num-infer-gpus 1 --inference.vllm.gpu-memory-utilization 0.45 --trainer.ckpt.keep-last 1 --no-monitors.prime
 ```
+
+The Phase 3 commands run as written only with the full private dataset. With this repo's public subset, point the configs at
+`data/dataset_v04/` here and rebuild the fine-tuning files with `python -m recipe_tax.sft_prepare --dataset-dir ../data/dataset_v04 --out-dir ../data/sft_v04`.
 
 ## Data
 
@@ -155,6 +327,10 @@ CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl
 - **Train** (`data/dataset/`, `data/dataset_dsv4/`, `data/dataset_sonnet/`): silver labels — `contains` from TypeSafe Jev
   (0.99 vs gold), origin from LLM teachers. Consensus set (two-teacher agreement), single-teacher DeepSeek set (no gate),
   and the Sonnet 5.5 set that B″ and arm D train on (influence on 6.6% of rows vs 0.6% in the consensus set).
+- **Phase 3** (`data/dataset_v04/`): taxonomy 0.4.0 labels. 4,457 of the 5,774 training recipes and 350 of the 439 gold
+  recipes are here. Not here: the 224-recipe hard set and the 700 newly sourced training recipes (scraped from recipe sites,
+  not redistributable), and the app captures described below. `data/dataset/`, `dataset_dsv4/` and `dataset_sonnet/` stay as
+  the record of days 1 and 2; their labels use taxonomy 0.3.3 (`Unplaced`), so the environment's default is now `dataset_v04`.
 - **Raw** recipes: Food.com (CC0) and Wikibooks Cookbook (CC BY-SA 3.0; each record carries its `source` URL). The 89 gold and
   ~460 train recipes captured from the author's own app are excluded from this repository; the private 439-recipe numbers are
   reported alongside the 350-recipe public numbers above.
@@ -185,5 +361,8 @@ The fix the tool needs: when `config.tie_word_embeddings` is set and `_tied_weig
 already exists is to remove that one tensor from its shard and from `model.safetensors.index.json`; the weights are identical
 to `embed_tokens`, so nothing is lost. After that the same file loaded in both stacks and scored 0.821 (vLLM) and 0.817 (MLX)
 on the 439 gold — which is also how we confirmed the two eval stacks agree.
+
+**Update, Phase 3:** at prime-rl commit `4c12d15` the tool converts the same model without a patch and the export has no
+`lm_head.weight` entry, so both halves are fixed upstream.
 
 Found at prime-rl commit `cbd3702`; the patched tool and its `.orig` are in `pod-archive/tools/` locally (not in this repo).

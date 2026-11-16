@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # Sync the environment package + frozen train set to the pod. Run FROM THE MAC:
 #   bash scripts/pod_sync.sh <ssh-host-or-alias> [ssh-port]
+#   NO_SECRETS=1 bash scripts/pod_sync.sh ...   # third-party pod: ship code and data only, no credentials
 # Excludes: .venv, outputs, raw/gold/silver data, .env, runs/. Only what training needs.
 set -euo pipefail
 HOST="${1:?ssh host, e.g. root@1.2.3.4 or a ~/.ssh/config alias}"; PORT="${2:-22}"
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
-ssh -p "$PORT" "$HOST" 'mkdir -p ~/prime-intellect/env ~/prime-intellect/data/dataset ~/prime-intellect/data/sft ~/prime-intellect/data/dataset_sonnet ~/prime-intellect/data/sft_sonnet ~/prime-intellect/models'
+ssh -p "$PORT" "$HOST" 'mkdir -p ~/prime-intellect/env ~/prime-intellect/data/dataset ~/prime-intellect/data/sft ~/prime-intellect/data/dataset_sonnet ~/prime-intellect/data/sft_sonnet ~/prime-intellect/data/dataset_v04 ~/prime-intellect/data/sft_v04 ~/prime-intellect/tools ~/prime-intellect/models'
 
 # --- secrets: build ~/.pod-env on the Mac from local credentials, ship it, never echo it ---
 # PRIME_API_KEY / PRIME_TEAM_ID from ~/.prime/config.json; HF_TOKEN from $HF_TOKEN or the HF CLI token cache.
+if [ "${NO_SECRETS:-0}" = "1" ]; then
+  echo "NO_SECRETS=1: not shipping ~/.pod-env (no Prime key, HF token or W&B key on this pod)"
+else
 TMP_ENV="$(mktemp)"; chmod 600 "$TMP_ENV"
 python3 - "$TMP_ENV" <<'PY'
 import json, os, sys, pathlib
@@ -30,6 +34,7 @@ print(f"pod-env: {len(lines)} secrets staged ({', '.join(l.split('=')[0].split()
 PY
 scp -P "$PORT" -q "$TMP_ENV" "$HOST:.pod-env" && rm -f "$TMP_ENV"
 ssh -p "$PORT" "$HOST" 'chmod 600 ~/.pod-env; grep -q "source ~/.pod-env" ~/.bashrc || echo "[ -f ~/.pod-env ] && source ~/.pod-env" >> ~/.bashrc'
+fi
 rsync -avz -e "ssh -p $PORT" --delete \
   --exclude '.venv' --exclude 'outputs' --exclude '__pycache__' --exclude '*.egg-info' \
   "$SRC/env/" "$HOST:~/prime-intellect/env/"
@@ -37,6 +42,10 @@ rsync -avz -e "ssh -p $PORT" \
   "$SRC/data/dataset/train.jsonl" "$SRC/data/dataset/eval.jsonl" "$SRC/data/dataset/manifest.json" \
   "$HOST:~/prime-intellect/data/dataset/"
 rsync -avz -e "ssh -p $PORT" "$SRC/data/sft/train.jsonl" "$SRC/data/sft/valid.jsonl" "$HOST:~/prime-intellect/data/sft/"
-for d in dataset_sonnet sft_sonnet; do [ -d "$SRC/data/$d" ] && rsync -avz -e "ssh -p $PORT" "$SRC/data/$d/" "$HOST:~/prime-intellect/data/$d/"; done
+for d in dataset_sonnet sft_sonnet dataset_v04 sft_v04; do [ -d "$SRC/data/$d" ] && rsync -avz -e "ssh -p $PORT" "$SRC/data/$d/" "$HOST:~/prime-intellect/data/$d/"; done
 rsync -avz -e "ssh -p $PORT" "$SRC/taxonomy.yaml" "$HOST:~/prime-intellect/taxonomy.yaml"
+# Patched SFT exporter (prime-rl issue #4441: _tied_weights_keys is None on Qwen3.5-2B). Shipped, NOT installed: upstream may have fixed it.
+[ -f "$SRC/pod-archive/tools/convert_dcp_to_bf16.py" ] && rsync -avz -e "ssh -p $PORT" "$SRC/pod-archive/tools/convert_dcp_to_bf16.py" "$HOST:~/prime-intellect/tools/"
+echo "If tools/convert_dcp_to_bf16.py fails with a TypeError on _tied_weights_keys: cp ~/prime-intellect/tools/convert_dcp_to_bf16.py ~/prime-rl/tools/"
+echo "The export still contains a duplicate lm_head.weight: vLLM loads it, mlx-lm does not (drop that tensor before using it on the Mac)."
 echo "synced. On the pod: cd ~/prime-rl && uv pip install -e ~/prime-intellect/env -e ~/prime-intellect/env/environments/recipe_classify"

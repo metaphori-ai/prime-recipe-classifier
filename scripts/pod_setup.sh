@@ -2,11 +2,20 @@
 # One-time setup on a fresh Prime pod (Ubuntu + CUDA). Run ON THE POD after SSH-ing in:
 #   bash pod_setup.sh
 # Then, FROM THE MAC, sync the project (see scripts/pod_sync.sh).
+# RUNPOD (learned 2026-11-16, after a disk resize wiped the container disk and a finished SFT with it):
+#   - /root (overlay) is fast but is ERASED on restart, resize or stop. /workspace is the network volume and survives.
+#   - /workspace does not allow chmod: uv's cache, git clones and venvs fail there. Keep prime-rl, caches and in-progress runs
+#     on /root, and copy every FINISHED artefact (exported weights, eval folders, logs) to /workspace/save right away.
+#   - Before this script:  echo 'export UV_CACHE_DIR=/root/.cache/uv' >> ~/.bashrc; echo 'export HF_HOME=/root/.cache/huggingface' >> ~/.bashrc
+#                          source ~/.bashrc; mkdir -p /workspace/save /root/prime-intellect /home/ubuntu
+#                          ln -sfn /root/prime-intellect /home/ubuntu/prime-intellect
+#   - Trainer checkpoints are ~25 GB each for a 2B model: size the disk for it or use --trainer.ckpt.keep-last 1.
+#   - If the installer dies on a 503 from a wheel index: cd ~/prime-rl && uv sync --all-extras (do not re-run the installer).
 set -euo pipefail
 cd ~
 # 0. Driver check FIRST. prime-rl installs a CUDA-13 stack; the driver must support it (driver >= 580 / "CUDA Version: 13.x"
 #    in the nvidia-smi header). A pod image with a 12.4 driver fails at import time after a 5-minute install. Pick a newer image.
-nvidia-smi | head -4
+nvidia-smi | head -4 || true   # head closes the pipe early; with pipefail + set -e the SIGPIPE (exit 141) killed the script silently on RunPod
 DRV_CUDA=$(nvidia-smi | grep -oE "CUDA Version: [0-9]+\.[0-9]+" | grep -oE "[0-9]+\.[0-9]+")
 echo "driver supports CUDA ${DRV_CUDA:-unknown}"
 if [ -n "${DRV_CUDA:-}" ] && [ "${DRV_CUDA%%.*}" -lt 13 ]; then

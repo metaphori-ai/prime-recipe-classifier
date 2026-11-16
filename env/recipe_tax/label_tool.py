@@ -2,6 +2,7 @@
 
   cd env && uv run --with pyyaml python -m recipe_tax.label_tool            # http://127.0.0.1:8765
   ... --blind 50                                                              # blind relabel of 50 random labeled ids → gold_relabel.jsonl
+  ... --set gold_hard                                                         # review another set: data/gold_hard/{candidates,origin_prefill,contains_jev,rules}.json[l] → data/gold_hard/gold.jsonl
 
 Consistency features: picker emits only valid taxonomy paths; convention comments from taxonomy.yaml shown per node;
 labeling policies on screen; Jev pre-fill with probabilities; 3-state contains (present / absent / uncertain);
@@ -21,6 +22,8 @@ JEV  = ROOT / "data" / "silver" / "contains_jev_candidates.jsonl"
 PREFILL = ROOT / "data" / "gold" / "origin_prefill.jsonl"
 GOLD = ROOT / "data" / "gold" / "gold.jsonl"
 RELABEL = ROOT / "data" / "gold" / "gold_relabel.jsonl"
+RULES = ROOT / "data" / "gold" / "rules.json"   # optional: [{"code","name","rule","decision_needed"}] shown beside the policies
+SET = "gold"
 
 def read_jsonl(p: Path) -> list[dict]:
     if not p.exists(): return []
@@ -67,6 +70,7 @@ class State:
         self.cands = read_jsonl(CAND)
         self.jev = {r["id"]: r for r in read_jsonl(JEV)}
         self.prefill = {r["id"]: r for r in read_jsonl(PREFILL)}
+        self.rules = json.loads(RULES.read_text(encoding="utf-8")) if RULES.exists() else []
         self.blind = blind
         self.out = RELABEL if blind else GOLD
         self.gold = {r["id"]: r for r in read_jsonl(self.out)}
@@ -87,11 +91,17 @@ class State:
                          "prefill": (None if self.blind else self.prefill.get(c["id"])),
                          "gold": None if self.blind else self.gold.get(c["id"])})
         return {"taxonomy_version": self.tax.version, "classes": [c for c in self.tax.contains_classes if c != "incomplete"],
-                "nodes": nodes, "records": recs, "blind": bool(self.blind), "out": str(self.out.relative_to(ROOT)), "yes": YES, "no": NO}
+                "nodes": nodes, "records": recs, "blind": bool(self.blind), "out": str(self.out.relative_to(ROOT)), "yes": YES, "no": NO,
+                "rules": self.rules, "set": SET}
 
     def save(self, rec: dict) -> dict:
         rec["labeled_by"] = "human"; rec["labeled_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         rec["taxonomy_version"] = self.tax.version
+        pf = None if self.blind else self.prefill.get(rec["id"])
+        if pf:   # record the draft and whether the reviewer kept it, so reviewer-vs-draft agreement can be measured later
+            key = lambda o: sorted((x.get("role", "primary"), tuple(x["path"])) for x in (o or []))
+            rec["origin_prefill"] = {"by": pf.get("by", "model"), "origin": pf["labels"]["origin"], "confidence": pf.get("confidence"),
+                                     "kept": key(pf["labels"]["origin"]) == key(rec["labels"]["origin"])}
         self.gold[rec["id"]] = rec
         write_jsonl(self.out, list(self.gold.values()))
         return {"ok": True, "n": len(self.gold)}
@@ -153,7 +163,7 @@ textarea{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--
 <header>
   <strong>Gold labeling</strong><span id="blind"></span>
   <span class="prog" id="prog"></span>
-  <select id="filter"><option value="unlabeled">unlabeled</option><option value="all">all</option><option value="hard">hard</option><option value="ordinary">ordinary</option><option value="flagged">flagged</option><option value="labeled">labeled</option></select>
+  <select id="filter"><option value="unlabeled">unlabeled</option><option value="all">all</option><option value="hard">hard</option><option value="ordinary">ordinary</option><option value="flagged">flagged</option><option value="labeled">labeled</option><option value="decide">⚑ needs my decision</option></select>
   <input id="jump" placeholder="jump to # or title" style="width:220px">
   <span class="status" id="status"></span>
 </header>
@@ -164,9 +174,10 @@ textarea{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--
   <div id="tags"></div>
   <h2>Ingredients</h2><ul class="ing" id="ing"></ul>
   <details><summary>Method</summary><pre class="instr" id="instr"></pre></details>
+  <div id="rulebox"></div>
   <h2>Policies</h2>
   <div class="policy">
-    <b>Origin.</b> Spine = tradition, not country. Primary = the dish's <i>form/technique</i>; influence = borrowed <i>flavor system</i> (max 2). Follow the file's conventions (shown in orange on nodes). Stop at the deepest node the recipe <i>supports</i> — don't guess a region from one ingredient. Pan-national restaurant idiom → national node. No tradition → Unplaced › Foundational (building block) or Contemporary (modern, no parent).<br>
+    <b>Origin.</b> Spine = tradition, not country. Primary = the dish's <i>form/technique</i>; influence = borrowed <i>flavor system</i> (max 3). Two named dishes from two traditions = Global › Fusion + both as influences. Follow the file's conventions (shown in orange on nodes). Stop at the deepest node the recipe <i>supports</i> — don't guess a region from one ingredient. Pan-national restaurant idiom → national node. No tradition → Global › Foundational (building block) or Contemporary (modern, no parent).<br>
     <b>Contains.</b> Positive facts only. Optional / garnish / "A or B" alternatives <b>count as present</b>. Explicit vegan/vegetarian/X-free qualifiers <b>negate</b> the class. Missing quantities ≠ incomplete. "Serve with naan" is not an ingredient. Can't tell from text → <b>uncertain</b>, not a guess. Trust the ingredient list over the title for origin. For contains, an ingredient named in the <i>title</i> counts even if the list dropped it (Food.com truncation). <b>Soy sauce = gluten + soy</b> unless tamari / gluten-free.
   </div>
 </section>
@@ -194,9 +205,9 @@ textarea{width:100%;background:var(--bg);color:var(--fg);border:1px solid var(--
 let S, recs=[], view=[], i=0, cur={}, hist=[];
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-fetch('/api/state').then(r=>r.json()).then(d=>{S=d;recs=d.records;if(d.blind)$('blind').innerHTML='<span class="blind">BLIND RELABEL → '+esc(d.out)+'</span>';applyFilter();});
+fetch('/api/state').then(r=>r.json()).then(d=>{S=d;recs=d.records;for(const ru of (d.rules||[])){const o=document.createElement('option');o.value='rule:'+ru.code;o.textContent=ru.code+' — '+ru.name;$('filter').appendChild(o);}if(d.set&&d.set!=='gold')document.title='Review: '+d.set;if(d.blind)$('blind').innerHTML='<span class="blind">BLIND RELABEL → '+esc(d.out)+'</span>';applyFilter();});
 function applyFilter(){hist=[];const f=$('filter').value;view=recs.map((r,k)=>k).filter(k=>{const r=recs[k];const lab=!!r.gold;const fl=r.gold&&r.gold.flag;
- if(f==='unlabeled')return !lab;if(f==='labeled')return lab;if(f==='flagged')return fl;if(f==='hard')return r.reason.startsWith('hard');if(f==='ordinary')return r.reason.startsWith('ordinary');return true;});
+ if(f==='decide')return r.reason.includes('⚑')&&!lab;if(f.startsWith('rule:'))return r.reason.startsWith(f.slice(5)+' ');if(f==='unlabeled')return !lab;if(f==='labeled')return lab;if(f==='flagged')return fl;if(f==='hard')return r.reason.startsWith('hard');if(f==='ordinary')return r.reason.startsWith('ordinary');return true;});
  i=0;show();}
 $('filter').onchange=applyFilter;
 function goTo(gidx){if(!view.includes(gidx)){$('filter').value='all';view=recs.map((r,k)=>k);} hist.push(view[i]); i=view.indexOf(gidx); show();}
@@ -214,6 +225,7 @@ function show(){if(!view.length){$('title').textContent='Nothing in this filter.
    if(r.prefill){const pf=r.prefill.labels.origin;const pp=pf.find(o=>o.role==='primary');cur.primary=pp?pp.path:null;cur.infl=pf.filter(o=>o.role==='influence').map(o=>o.path);}}
  const pf=r.prefill;$('pfconf').innerHTML=pf?'<span class="conf '+pf.confidence+'">pre-fill: '+pf.confidence+'</span>':'';
  const pn=$('pfnote');if(pf){pn.style.display='';pn.innerHTML='<b>Claude:</b> '+esc(pf.rationale)+(g?' <span style="color:var(--mut)">(your saved label shown below)</span>':'');}else{pn.style.display='none';}
+ const ru=(S.rules||[]).find(x=>r.reason.startsWith(x.code+' '));$('rulebox').innerHTML=ru?'<h2>This recipe turns on</h2><div class="policy"><b>'+esc(ru.code)+' — '+esc(ru.name)+(ru.decision_needed?' <span style="color:var(--bad)">· your decision</span>':'')+'.</b> '+esc(ru.rule)+'</div>':'';
  $('notes').value=cur.notes;renderOrigin();renderClasses(r);$('status').textContent='';}
 function nodeLabel(n){return n.path.join(' › ')+(n.countries.length?' <small>['+n.countries.join(', ')+']</small>':'')+(n.note?' <span class="note">— '+esc(n.note)+'</span>':'');}
 function findNode(path){return S.nodes.find(n=>n.path.join('/')===path.join('/'));}
@@ -231,7 +243,7 @@ function picker(inp,list,onpick){let sel=0,items=[];
  inp.onkeydown=e=>{if(list.hidden)return;if(e.key==='ArrowDown'){sel=Math.min(items.length-1,sel+1);}else if(e.key==='ArrowUp'){sel=Math.max(0,sel-1);}else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(items[sel]){onpick(items[sel]);inp.value='';list.hidden=true;}return;}else if(e.key==='Escape'){list.hidden=true;return;}else return;
   e.preventDefault();[...list.children].forEach((el,k)=>el.classList.toggle('sel',k===sel));};}
 picker($('pq'),$('plist'),n=>{cur.primary=n.path;renderOrigin();});
-picker($('iq'),$('ilist'),n=>{if(cur.infl.length<2&&n.path[0]!=='unknown'){cur.infl.push(n.path);renderOrigin();}});
+picker($('iq'),$('ilist'),n=>{if(cur.infl.length<3&&n.path[0]!=='unknown'){cur.infl.push(n.path);renderOrigin();}});
 function renderClasses(r){$('classes').innerHTML=S.classes.map(c=>{const p=r.jev[c];const v=cur.contains[c];
  const th=(r.traps||{})[c];return '<div class="cls'+(th?' hit':'')+'"><div><div class="name">'+c+'</div><div class="bar"><i style="width:'+Math.round((p||0)*100)+'%"></i></div><div class="p">'+(p==null?'no jev':'jev '+p.toFixed(2))+'</div>'+(th?'<div class="trap">trap: '+esc(th.join(', '))+'</div>':'')+'</div>'+
  '<div class="tri" data-c="'+c+'"><button data-v="yes" class="'+(v==='yes'?'on-yes':'')+'">yes</button><button data-v="no" class="'+(v==='no'?'on-no':'')+'">no</button><button data-v="unc" class="'+(v==='unc'?'on-unc':'')+'">?</button></div></div>';}).join('');
@@ -252,7 +264,14 @@ document.addEventListener('keydown',e=>{const t=e.target.tagName;if(t==='INPUT'|
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(); ap.add_argument("--port", type=int, default=8765); ap.add_argument("--blind", type=int, default=0); ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--set", default="gold", help="review set under data/<set>/ (default: the original gold set)")
     a = ap.parse_args(argv)
+    if a.set != "gold":
+        global CAND, JEV, PREFILL, GOLD, RELABEL, RULES, SET
+        d = ROOT / "data" / a.set; SET = a.set
+        if not (d / "candidates.jsonl").exists(): sys.exit(f"no {d / 'candidates.jsonl'}")
+        CAND, JEV, PREFILL = d / "candidates.jsonl", d / "contains_jev.jsonl", d / "origin_prefill.jsonl"
+        GOLD, RELABEL, RULES = d / "gold.jsonl", d / "gold_relabel.jsonl", d / "rules.json"
     global STATE; STATE = State(blind=a.blind)
     url = f"http://127.0.0.1:{a.port}/"
     print(f"{len(STATE.cands)} candidates · {len(STATE.jev)} with Jev pre-fill · {len(STATE.prefill)} with origin pre-fill · {len(STATE.gold)} already labeled → {STATE.out.relative_to(ROOT)}\n{url}  (Ctrl-C to stop)")

@@ -1,0 +1,28 @@
+{
+ "eval": 439,
+ "eval_gold_hard": 224,
+ "train": 5774,
+ "skipped": {
+  "gold id": 663,
+  "jev: incomplete": 498,
+  "content-duplicate of gold": 4
+ },
+ "origin_silver": {
+  "teachers": 1,
+  "files": [
+   "origin_silver_sonnet55v04.jsonl"
+  ],
+  "agreement_gate": false
+ },
+ "cap_primary": 300,
+ "capped_dropped": {
+  "North American/American": 1712
+ },
+ "publishable_train": 4457,
+ "publishable_eval": 350,
+ "sources": {
+  "foodcom": 2004,
+  "ss": 1406,
+  "wikibooks": 2803
+ }
+}

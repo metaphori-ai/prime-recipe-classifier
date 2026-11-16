@@ -25,6 +25,10 @@ DATA_FILES = {  # src -> dst, filtered to publishable ids
     "data/dataset/manifest.json": "data/dataset/manifest.json",
     "data/dataset_dsv4/train.jsonl": "data/dataset_dsv4/train.jsonl",
     "data/dataset_sonnet/train.jsonl": "data/dataset_sonnet/train.jsonl",
+    # Phase 3 (taxonomy 0.4.0). eval_gold_hard.jsonl is deliberately NOT listed: the hard set is private (ss-src-*).
+    "data/dataset_v04/train.jsonl": "data/dataset_v04/train.jsonl",
+    "data/dataset_v04/eval.jsonl": "data/dataset_v04/eval.jsonl",
+    "data/dataset_v04/manifest.json": "data/dataset_v04/manifest.json",
     "data/gold/gold.jsonl": "data/gold/gold.jsonl",
     "data/silver/origin_eval_dsv4.jsonl": "data/silver/origin_eval_dsv4.jsonl",
     "data/silver/origin_eval_qwen36.jsonl": "data/silver/origin_eval_qwen36.jsonl",
@@ -36,7 +40,8 @@ SECRET_RE = re.compile(r"(sk-ant-[A-Za-z0-9_-]{10,}|hf_[A-Za-z0-9]{20,}|AKIA[0-9
 
 def publishable_ids() -> set[str]:
     ids = set()
-    for f in ("data/dataset/eval.jsonl", "data/dataset/train.jsonl", "data/dataset_dsv4/train.jsonl", "data/dataset_sonnet/train.jsonl"):
+    for f in ("data/dataset/eval.jsonl", "data/dataset/train.jsonl", "data/dataset_dsv4/train.jsonl", "data/dataset_sonnet/train.jsonl",
+              "data/dataset_v04/eval.jsonl", "data/dataset_v04/train.jsonl"):
         p = ROOT / f
         if p.exists():
             for l in open(p):
@@ -86,6 +91,13 @@ def main() -> int:
             if SECRET_RE.search(txt): hits.append(str(p.relative_to(OUT)))
     if hits:
         print("REFUSING: possible secrets in", hits, file=sys.stderr); return 2
+    private = []
+    for p in (OUT / "data").rglob("*.jsonl"):
+        n = sum(1 for l in open(p) if '"id": "ss-' in l or '"recipe_id": "ss-' in l)
+        if n: private.append((str(p.relative_to(OUT)), n))
+    if (OUT / "data" / "gold_hard").exists() or list((OUT / "data").rglob("*gold_hard*")): private.append(("gold_hard present", 1))
+    if private:
+        print("REFUSING: private (ss-*) records or the hard set in the export:", private, file=sys.stderr); return 3
     for d, (k, t) in stats.items(): print(f"  {d}: {k}/{t} records (publishable only)")
     print("exported to", OUT)
     return 0

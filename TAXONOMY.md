@@ -245,3 +245,11 @@ Same `derive()` enforces it for agents and fills the column for search.
 | `non_kosher_seafood` | kosher ingredient check | eel, catfish, squid, shark, sturgeon — closes the known `fish` gap |
 
 Adding a class = one Jev Noul appended to `QUESTIONS` + a per-class pass over gold with pre-fill. Does not touch origin or the student's existing targets.
+
+
+## 0.4.0 (2026-11-15)
+
+- `Unplaced` renamed `Global`: owned by no single tradition. Guard: however widely a dish has spread, if it has a home it goes home.
+- New `Global > Fusion`, the dish × dish rule: two named dishes or forms from two traditions → Fusion with both traditions as influences. One dish plus a borrowed seasoning → owner + 1 influence.
+- Influence cap 2 → 3.
+- Older text above still says `Unplaced`; read it as `Global`.
