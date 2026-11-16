@@ -55,9 +55,10 @@ def taxonomy_block(tax: Taxonomy) -> str:
     return "\n".join(lines)
 
 
-def system_prompt(tax: Taxonomy) -> str:
+def system_prompt(tax: Taxonomy, mode: str = "full") -> str:
+    if mode not in ("full", "origin"): raise ValueError(f"mode must be full or origin, got {mode!r}")
     classes = [c for c in tax.contains_classes]
-    return f"""You classify recipes against a fixed taxonomy. Reply with ONLY a JSON object inside <answer></answer> tags.
+    origin_rules = f"""You classify recipes against a fixed taxonomy. Reply with ONLY a JSON object inside <answer></answer> tags.
 
 ORIGIN. Give exactly one "primary" path: the culinary tradition that owns the dish's FORM and technique. Optionally up to three
 "influence" paths for a borrowed FLAVOR SYSTEM (e.g. a burger with teriyaki glaze: primary American, influence Japanese).
@@ -96,7 +97,12 @@ CONVENTIONS (follow these over your own instinct):
 - Give the FULL path from the root, e.g. ["South Asian", "Indian", "South Indian", "Kerala"], never a bare leaf.
 Every path must be an exact sequence of node names from this tree (indentation = depth):
 {taxonomy_block(tax)}
-
+"""
+    if mode == "origin":   # Phase 5: the ORIGIN text above is word for word the full prompt's; only the contains half is gone
+        return origin_rules + """
+Output format:
+<answer>{"origin": [{"path": ["European", "British", "Anglo-Indian"], "role": "primary"}]}</answer>"""
+    return origin_rules + f"""
 CONTAINS. List every ingredient class present. Positive facts only; absence is never stated. Classes:
 {", ".join(classes)}
 Rules: optional ingredients and garnishes COUNT as present. For "A or B", the FIRST-named ingredient counts; a substitute the cook
@@ -115,7 +121,9 @@ class RecipeData(vf.TaskData):
     recipe_id: str
     ingredients: list[str]
     gold: dict[str, Any]
-    """{"origin": [...], "contains": [...], "contains_uncertain": [...]}"""
+    """{"origin": [...], "contains": [...], "contains_uncertain": [...]}; origin mode needs only "origin"."""
+    mode: str = "full"
+    """"full" = origin + contains (days 1-2, Phase 3). "origin" = Phase 5: origin-only answer, prompt and reward."""
 
 
 class RecipeClassifyTask(vf.Task[RecipeData]):
@@ -134,12 +142,12 @@ class RecipeClassifyTask(vf.Task[RecipeData]):
     async def validate(self, runtime: vf.Runtime) -> bool:
         """Model-free check: the gold labels, emitted as an answer, must score exactly 1.0, and an empty
         answer must gate to 0. Catches gold rows the taxonomy can't validate (bad path, unknown class)."""
-        g = self.data.gold
-        gold_answer = {"origin": g["origin"], "contains": g["contains"]}
-        r = score(self.tax, g, gold_answer, self.data.ingredients)
+        g, m = self.data.gold, self.data.mode
+        gold_answer = {"origin": g["origin"], "contains": g.get("contains", [])}
+        r = score(self.tax, g, gold_answer, self.data.ingredients, mode=m)
         if strict_gate(self.tax, gold_answer) or r["gate"] or abs(r["reward"] - 1.0) > 1e-9:
             raise RuntimeError(f"gold does not score 1.0: {r}")
-        nothing = score(self.tax, g, parse_answer("no answer") or {}, self.data.ingredients)
+        nothing = score(self.tax, g, parse_answer("no answer") or {}, self.data.ingredients, mode=m)
         return nothing["reward"] == 0.0
 
     def _scored(self, trace: vf.Trace) -> dict:
@@ -154,7 +162,7 @@ class RecipeClassifyTask(vf.Task[RecipeData]):
                 trace.info["pred"] = pred
                 try:
                     title = self.data.prompt.split("\n", 1)[0].removeprefix("Title:").strip() if self.data.prompt.startswith("Title:") else None
-                    trace.info["scored"] = score(self.tax, self.data.gold, pred, self.data.ingredients, title=title)
+                    trace.info["scored"] = score(self.tax, self.data.gold, pred, self.data.ingredients, title=title, mode=self.data.mode)
                 except Exception as e:  # malformed-but-parseable JSON (wrong shapes). Treat as a gate failure, never kill the episode.
                     trace.info["scored"] = {"reward": 0.0, "gate": f"malformed: {type(e).__name__}", "origin": 0.0, "contains": 0.0,
                                             "unsupported": [], "resolved": 0, "unresolved": 0, "unknown_classes": []}
@@ -232,6 +240,8 @@ class RecipeClassifyConfig(vf.TasksetConfig):
     data/dataset, dataset_dsv4 and dataset_sonnet are frozen at taxonomy 0.3.3 ("Unplaced") and kept as the record of days 1-2."""
     taxonomy_path: str | None = None
     """Override taxonomy.yaml location (defaults to the project root copy)."""
+    mode: str = "full"
+    """"full" (default: every run up to Phase 3) or "origin" (Phase 5: no contains in the prompt, the answer or the reward)."""
     publishable_only: bool = False
     """Keep only records whose source license allows redistribution (for Hub datasets)."""
 
@@ -239,7 +249,7 @@ class RecipeClassifyConfig(vf.TasksetConfig):
 class RecipeClassifyTaskset(vf.Taskset[RecipeClassifyTask, RecipeClassifyConfig]):
     def load(self) -> list[RecipeClassifyTask]:
         tax = Taxonomy.load(self.config.taxonomy_path) if self.config.taxonomy_path else Taxonomy.load()
-        sys_prompt = system_prompt(tax)
+        sys_prompt = system_prompt(tax, self.config.mode)
         tasks = []
         with open(self.config.dataset_path, encoding="utf-8") as f:
             for line in f:
@@ -248,6 +258,6 @@ class RecipeClassifyTaskset(vf.Taskset[RecipeClassifyTask, RecipeClassifyConfig]
                 if self.config.publishable_only and not r.get("publishable"): continue
                 tasks.append(RecipeClassifyTask(
                     RecipeData(id=r["id"], recipe_id=r["id"], prompt=r["prompt"], system_prompt=sys_prompt,
-                               ingredients=r["ingredients"], gold=r["labels"]),
+                               ingredients=r["ingredients"], gold=r["labels"], mode=self.config.mode),
                     self.config.task))
         return tasks

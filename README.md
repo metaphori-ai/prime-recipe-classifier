@@ -7,9 +7,11 @@ There were many interesting parts of this process; the one that mattered most fo
 
 ![project journey](journey.svg)
 
-## Day 2 went back to the data
+# Phase 1 and Phase 2
 
-Day 1 ended with every arm converging on the same ceiling: the 2B and 4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at most 9 of the 32 recipe influences (the harder challenge) in the gold set while the training labels carried an influence on only 0.6% of recipes. 
+## Phase 2 went back to the data
+
+Phase 1 ended with every arm converging on the same ceiling: the 2B and 4B SFT models were within noise of each other (0.782 vs 0.794), the RL run plateaued below both, and all of them found at most 9 of the 32 recipe influences (the harder challenge) in the gold set while the training labels carried an influence on only 0.6% of recipes. 
 
 It became clear we need to look at the label data on the silvers. Scaling parameters or RL steps against those labels
 could only converge on them. So the next step was better data: measure every candidate teacher against
@@ -18,7 +20,7 @@ could not ground (vanilla extract-only labelled with `alcohol`, gelatin as `pork
 
 The relabel moved the influence rate from 0.6% to 6.6%, the SFT ceiling from 0.78 to 0.82, and gave RL something it could amplify.
 
-![day 2: teachers, relabel, two SFT stacks, GRPO from SFT](journey-2b.svg)
+![phase 2: teachers, relabel, two SFT stacks, GRPO from SFT](journey-2b.svg)
 
 (Detailed version with the numbers behind each box: [`journey-2.svg`](journey-2.svg).)
 
@@ -122,7 +124,7 @@ Fusion, Contemporary and American is the perfect blurred area that can illuminat
 
 ## Phase 3 Dataset
 
-| | Day 2 | Phase 3 |
+| | Phase 2 | Phase 3 |
 |---|---|---|
 | Training recipes | 5,066 | 5,774 |
 | Test recipes, original gold | 439 | 439 |
@@ -135,7 +137,7 @@ Both gold sets are held out of training. The hard set and the newly sourced reci
 
 ## Baseline before training
 
-Before training anything new we scored the day-2 fine-tune (B″, full fine-tune on Sonnet labels) on the hard set, so Phase 3 has something to beat. Same weights, same sampling, same scorer. The hard set ran on the Mac (MLX) and the original gold on the pod (vLLM); the two stacks agree within noise on the 439 (0.817 vs 0.821).
+Before training anything new we scored the Phase 2 fine-tune (B″, full fine-tune on Sonnet labels) on the hard set, so Phase 3 has something to beat. Same weights, same sampling, same scorer. The hard set ran on the Mac (MLX) and the original gold on the pod (vLLM); the two stacks agree within noise on the 439 (0.817 vs 0.821).
 
 | | Hard set (224), on the Mac | Original gold (439), on the pod |
 |---|---|---|
@@ -156,7 +158,7 @@ What the baseline says:
 
 - **Fusion is where the old model fails outright.** It never answers `Fusion` (0 of 10) and offers an influence on 7 recipes where gold has 45.
 - **Depth is not the problem we assumed.** Its answers are as deep as gold on average (2.65 levels vs 2.63). On the regional recipes it was exact on 38, stopped short on 17, and on 18 went to the right depth but picked the wrong node. The weakness is choosing the right region, more than daring to go deep.
-- **The taxonomy and reward change did not move the old numbers.** Re-scoring the saved day-2 answers under taxonomy 0.4.0 and reward v3 gives B″ 0.821 and D 0.857, the same as recorded, so Phase 3 can be compared directly on the original 439.
+- **The taxonomy and reward change did not move the old numbers.** Re-scoring the saved Phase 2 answers under taxonomy 0.4.0 and reward v3 gives B″ 0.821 and D 0.857, the same as recorded, so Phase 3 can be compared directly on the original 439.
 
 What we expect from Phase 3, written down before the run:
 
@@ -173,8 +175,8 @@ One fine-tune on the Phase 3 data, then 80 steps of GRPO from it with reward v3.
 
 | Model | Original 439: reward | origin | exact | Hard 224: reward | origin | exact |
 |---|---|---|---|---|---|---|
-| B″, day-2 fine-tune | 0.821 | 0.727 | 63% | 0.735 | 0.607 | 45% |
-| D, day-2 GRPO | 0.849 | 0.749 | 64% | 0.765 | 0.641 | 47% |
+| B″, Phase 2 fine-tune | 0.821 | 0.727 | 63% | 0.735 | 0.607 | 45% |
+| D, Phase 2 GRPO | 0.849 | 0.749 | 64% | 0.765 | 0.641 | 47% |
 | Phase 3 fine-tune | 0.821 | 0.728 | 63% | 0.738 | 0.634 | 47% |
 | **E, Phase 3 GRPO** | 0.837 | 0.739 | 66% | **0.786** | **0.696** | **53%** |
 
@@ -188,19 +190,19 @@ Origin on the hard set, by kind of recipe:
 
 What moved:
 
-- **The hard set, on origin.** +0.055 over D and +0.09 over the day-2 fine-tune. The hard set was evaluated twice and the two runs agree to 0.001 on reward.
+- **The hard set, on origin.** +0.055 over D and +0.09 over the Phase 2 fine-tune. The hard set was evaluated twice and the two runs agree to 0.001 on reward.
 - **Influences.** E matches a gold influence exactly on 15 to 20 of the 45 hard recipes that have one; D matched 6. It adds one where gold has none once.
 - **Fusion.** E answers `Fusion` 6 times on the hard set (3 right, 3 wrong; gold has 10) and finds all 3 on the original gold with the right parents. No earlier model ever answered it.
 
 What did not:
 
 - **The original 439 is level with D** (0.837 vs 0.849), as predicted before the run. The gap is in `contains` (0.956 vs 0.971); origin is within noise and exact match is 2 points higher.
-- **The fine-tune alone did not beat the day-2 fine-tune on reward.** It gained on origin and lost the same amount on `contains`. The GRPO stage recovered most of that.
+- **The fine-tune alone did not beat the Phase 2 fine-tune on reward.** It gained on origin and lost the same amount on `contains`. The GRPO stage recovered most of that.
 
 What we learned about the method:
 
 - **The in-training score misled us.** The 150-recipe gold sample logged every 10 steps moved from 0.868 to 0.872 over the run, which looked like nothing. The full evaluation shows +0.06 origin on the hard set. A sample drawn only from the easy set, blending both reward terms, cannot see where the model is improving.
-- **This model has two jobs and one of them belongs elsewhere.** `contains` is handled better by a dedicated system. Phase 4 drops it from the fine-tune and the reward and trains origin only.
+- **This model has two jobs and one of them belongs elsewhere.** `contains` is handled better by a dedicated system. Phase 4 tests what dropping it would do before Phase 5 trains on origin only.
 
 ### How the gain arrived
 
@@ -215,58 +217,214 @@ The same hard-set evaluation, run on weights saved during the GRPO stage:
 
 Most of the gain is in by step 60. Step 70 to 80 still adds 0.019 on origin, almost all of it on the ownership recipes (64 to 70 exact of 108), against a repeatability of about 0.002 for this evaluation. The model was still improving when the run stopped, so 80 steps was too short. `Fusion` is the exception: the model answers it 6 times (3 right) at all three steps, and the fusion slice peaked at step 60.
 
+The token-level analysis of these two models (near and blind misses, what GRPO did to confidence, how much of the reward was about origin) is in Phase 4.
+
 ### What broke on the way
 
 Three failures, none of them about the model. Each cost time, and each is now a rule in the setup scripts.
 
-- **Disk.** On prime-rl `4c12d15` a trainer checkpoint for the 2B model is about 25 GB. The fine-tune kept four and the first GRPO checkpoint filled a 200 GB disk at step 20. The disk had been sized from day 2, when a whole run took 33 GB. Fix: `--trainer.ckpt.keep-last 1`, and one final checkpoint for the fine-tune.
+- **Disk.** On prime-rl `4c12d15` a trainer checkpoint for the 2B model is about 25 GB. The fine-tune kept four and the first GRPO checkpoint filled a 200 GB disk at step 20. The disk had been sized from Phase 2, when a whole run took 33 GB. Fix: `--trainer.ckpt.keep-last 1`, and one final checkpoint for the fine-tune.
 - **Lost weights.** Enlarging the disk on the rented pod restarted it and erased everything on the local disk, including the finished fine-tune, which had not been copied off yet. The fine-tune was rerun (it is seeded, and the losses matched to three decimals). Fix: every finished artefact goes to the persistent volume and to a second machine as soon as it exists.
 - **Memory at start-up.** Continuing the run from step 80 was killed twice. The cause was container RAM. The environment config uses `runtime.type = "subprocess"`, which starts one Python process per attempt in flight. While the trainer is busy with its slow first step, the dispatcher raises concurrency to about 4,350, and we counted 4,536 Python processes holding about 256 GiB against a 251 GB limit. The 80-step run had passed through the same spike with slightly fewer in flight. Next run: cap the number of attempts in flight and watch RAM through the first step. The continuation to 120 steps was not completed.
 
-# Phase 4 (plan, written before the run)
+# Phase 4: back to the basics
 
-**Question.** Does the 2B model get better at origin and influences when that is its only job?
+Phase 4 was planned as another training run: drop `contains` from the 2B model's job and train on origin alone. Before renting a GPU we ran the baselines for that change on a laptop, and the baselines raised better questions than the run would have answered. So Phase 4 became an analysis phase with no training in it. After three phases of changing labels, rewards and taxonomies, it asks what the problem is made of.
 
-In the product, `contains` comes from a dedicated classifier (TypeSafe Jev, 0.99 against gold). The 2B model does not need to produce it. Phase 3 gave one hint that the two jobs compete: the Phase 3 fine-tune gained on origin and lost the same amount on `contains`. Phase 4 tests that directly.
+The questions, in the order they came up:
 
-**What changes, and only this:**
+1. **One job or two?** Does a model classify origin better when it does not also have to list allergens?
+2. **What is the model reading?** The title, the ingredients, or would the method help?
+3. **What kind of wrong is it?** When the model misses, was the right answer its second choice, or was it never considered?
+4. **What did the reward teach?** How much of the GRPO signal in Phase 3 was about origin?
 
-| | Phase 3 (arm E) | Phase 4 |
+Everything here ran on the Mac against saved weights and saved training attempts, plus about 7 million Sonnet input tokens (97% cached).
+
+## One job or two: what the instructions alone change
+
+Every model we could run locally answered both gold sets twice: once with the full instructions (origin and `contains`) and once with the origin-only instructions. None of these models has been trained on the task. Sonnet 5.5 is the model that labelled the training data. Origin score, full instructions → origin only:
+
+| Model, untrained | Original 439 | Hard 224 |
 |---|---|---|
-| Model answer | origin, contains, evidence | origin only |
-| Instructions | origin rules, taxonomy tree, contains rules | origin rules and taxonomy tree, word for word; contains rules removed |
-| Reward | 0.55 origin + 0.45 contains | origin (same v3 function) |
-| Recipes, origin labels, taxonomy | Phase 3 | the same |
-| Base model, learning rates, batch, temperature | arm E | the same |
+| Qwen3.5-2B | 0.330 → 0.407 | 0.295 → 0.312 |
+| Qwen3.5-4B | 0.577 → 0.560 | 0.467 → 0.457 |
+| Qwen3.5-9B | 0.600 → 0.658 | 0.480 → 0.582 |
+| Qwen3.5-27B | 0.783 → 0.781 | 0.741 → 0.761 |
+| Sonnet 5.5 (the label teacher) | 0.850 → 0.855 | 0.889 → 0.891 |
+| *E, the trained 2B from Phase 3, full instructions* | *0.739* | *0.696* |
 
-**Data.** Nothing from days 1, 2 or Phase 3 is edited or removed. Phase 4 gets its own copy (`data/dataset_p4_origin/`, `data/sft_p4_origin/`) built from the Phase 3 files, with the `contains` labels left out of the copy. The environment gains a `mode` setting (`full` by default, `origin` for Phase 4), so every earlier config still runs as it did.
+The paired difference per recipe has a standard error of about 0.02 on either set, so only the 2B on the original gold and the 9B on both are clear moves.
 
-**Runs.**
+What the baselines say:
 
-1. Fine-tune 2B on the origin-only copy, same schedule as Phase 3 (340 steps).
-2. GRPO from it for 160 steps, saving weights at 60, 80, 100, 120, 140 and 160.
-3. The same two steps at 4B, only if the 2B result is clear.
+- **The effect is real for the weaker models and absent for the strong ones.** The 2B and 9B gain; the 27B and Sonnet do not move.
+- **Part of the weak-model gain is format, not judgment.** With the full instructions the 2B and 9B sometimes reason about allergens in the answer itself and run out of room (18 and 32 of 439 answers unusable). Counting only recipes where both answers were usable, the gain shrinks to +0.06 for the 2B and +0.02 for the 9B on the original gold. A fine-tuned model no longer makes that mistake, so this part will not carry over to a fine-tuned model.
+- **The 4B's small drop is one missing bracket.** Under origin-only instructions it left the closing `}` off 40 of 439 answers, which score zero. On the answers usable both ways it is 0.62 against 0.60. As a what-if only (the scorer is unchanged), repairing that bracket and re-scoring gives 0.621 on the original gold and 0.496 on the hard set, against 0.577 and 0.467 with the full instructions. A fine-tune fixes this for free.
+- **Size buys origin skill at every step.** Untrained, origin only: 0.41, 0.62 (4B repaired), 0.66, 0.78 on the original gold and 0.31, 0.50, 0.58, 0.76 on the hard set. The largest step is 2B to 4B. The hard set separates the sizes more than the original gold does: the 2B loses 0.10 moving to it and the 27B loses 0.02.
+- **The teacher's ceiling does not change** (0.855 and 0.891), so the training labels do not need redoing.
+- **With one job, models offer more influences.** Sonnet added an influence where gold has none on 38 recipes, against 17 with the full instructions; the 9B offered 47 against 14. Reward v3 charges 0.2 for each, so this is worth watching in training.
+- **The distance still to cover.** On the hard set the trained 2B is at 0.696, the untrained 27B at 0.761 and Sonnet at 0.891.
 
-**How it is judged.** On origin only, on both gold sets: origin score, exact match, the three hard-set slices, influences found, `Fusion` found. The comparison with arm E is made at **step 80**, where the two runs differ in one thing. Steps beyond 80 answer the separate question of what a longer run adds. The final step is fixed in advance at 160; the hard set is not used to pick a checkpoint.
+So the clean part of the one-job gain for a small model is a few points at most, and fine-tuning has already removed the format failures that produce the rest.
 
-The in-training evaluation changes too: it reads the hard set as well as a sample of the original gold, and logs origin alone, so the curve shows what Phase 3's could not.
+## What the model is reading
 
-For a product-level number, the combined system is scored as Phase 4 origin plus Jev's `contains` under the Phase 3 reward, which is directly comparable with arm E's 0.786 and 0.837.
+The model is shown a title and a list of ingredient names. To see which one it uses, we changed only the recipe text and left the instructions and labels alone. Origin score:
 
-**Numbers to beat (arm E, origin):**
+| | Title only | Ingredients only | Both (as trained) | Both plus method |
+|---|---|---|---|---|
+| Hard 224: Sonnet 5.5 | 0.881 | 0.772 | 0.891 | 0.887 |
+| Hard 224: Qwen3.5-27B, untrained | 0.736 | 0.482 | 0.761 | 0.763 |
+| Hard 224: E, the trained 2B | 0.659 | 0.383 | 0.696 | |
+| Original 439: Qwen3.5-27B, untrained | 0.748 | 0.477 | 0.781 | |
+| Original 439: E, the trained 2B | 0.721 | 0.421 | 0.739 | |
+
+- **The title carries almost everything.** Removing the ingredients costs 0.01 to 0.04. Removing the title costs 0.12 to 0.32. On both gold sets and for every model, this task is mostly recognising the dish by name.
+- **The method adds nothing.** Every recipe in the corpus has one and we had never shown it. For the two strong models it changes the score by less than the noise (Sonnet: 7 recipes better, 11 worse), so it stays out and nothing needs relabelling.
+- **The small model is much weaker at reading the food than at recognising names.** From ingredients alone the trained 2B is 0.39 behind Sonnet on the hard set; with the title it is 0.19 behind. On the regional recipes it gets 40 of 86 exactly right from the title alone and 4 of 86 from the ingredients alone.
+- **This explains the blind misses** (next section). More than half of the Phase 3 model's mistakes gave the gold answer under 1%. Those are dish names the 2B does not know. GRPO cannot teach a name, and neither can removing `contains`.
+- **Some recipes cannot be decided from the text at all.** Hummus has the same title and the same ingredients in every country that claims it. Where the claimants share a node the taxonomy rule is to stop there, but Greek, Egyptian, Turkish and Levantine sit under different top-level regions, so gold has to pick one. These should not count as errors; we have not yet counted how many there are.
+
+## What kind of wrong: the model's probabilities
+
+Scores say how often the model is wrong. Token probabilities say what kind of wrong. For each hard-set recipe we took the model's top answer (temperature 0), then fed the gold origin back in token by token and read the exact probability the model gave it (`scripts/logprob_probe.py`). Almost all of the JSON is certain. The uncertainty sits on a few tokens, and each is a decision: which node, go deeper or stop (`",` against `"],`), add an influence or finish.
+
+A wrong answer is a **near miss** if the gold answer had at least 10%, **possible** at 1 to 10%, and **blind** under 1%.
+
+| Hard set, 224 recipes, top answer | Phase 3 fine-tune | E, after GRPO |
+|---|---|---|
+| Origin score | 0.651 | 0.688 |
+| Same answer as gold | 104 | 110 |
+| Near misses | 21 | 13 |
+| Possible | 35 | 18 |
+| Blind misses | 64 | 83 |
+| Typical confidence in its own answer | 63% | 98% |
+
+What GRPO did with each kind of miss the fine-tune made:
+
+| Under the fine-tune | Recipes | Right after GRPO |
+|---|---|---|
+| Already right | 104 | 98 |
+| Near miss | 21 | 7 |
+| Possible | 35 | 5 |
+| Blind | 64 | 0 |
+
+- **GRPO only promotes answers the model was already considering.** It fixed a third of the near misses and none of the blind ones. An answer the model never tries is never rewarded.
+- **Fusion is a data problem.** 22 of E's 24 wrong fusion recipes are blind, and the training set has 29 `Fusion` examples. More GRPO steps will not reach them.
+- **GRPO made the model certain, right or wrong.** On the recipes E still gets wrong, the gold answer's probability fell on 101 of 114, typically to 3% of what it was. After the fine-tune, answers held at 95 to 99% confidence were right 87% of the time; after GRPO, 52%. If the product wants to flag doubtful answers, the fine-tune's confidence is the usable one.
+- **Part of the gain reported above is sharpening.** With sampling at temperature 0.7 the gap between the fine-tune and E is 0.062 on origin. Taking each model's top answer it is 0.037: the fine-tune loses 0.017 to sampling and E loses nothing. The Phase 3 results table is sampled; the product should use the top answer.
+- **Where the misses are.** For both models the largest group is the top-level region (50 and 45 recipes). Depth decisions are next and are the closest calls: where the fine-tune stopped one level short, it gave "go deeper" at least 10% in 13 of 17 cases. After GRPO "stopped short" grew from 17 to 28: under partial credit, stopping early is the safer answer and the model learned it.
+- **A rule that did not work.** Cutting the answer back to the parent whenever the deeper level is uncertain does not raise the score at any threshold. Low-confidence deep answers are right about as often as wrong.
+
+## How much of the training signal was about origin
+
+GRPO learns only from differences inside a group of eight attempts at one recipe. From E's saved attempts (`scripts/reward_signal_split.py`):
+
+| Steps | Within-group reward variance from origin | from `contains` | Groups with no signal | Same, had the reward been origin alone | Attempts whose push would change direction |
+|---|---|---|---|---|---|
+| 1 to 20 | 59% | 25% | 10% | 20% | 22% |
+| 21 to 40 | 65% | 23% | 27% | 42% | 28% |
+| 41 to 60 | 72% | 24% | 46% | 61% | 31% |
+| 61 to 80 | 71% | 26% | 58% | 70% | 33% |
+
+(The variance shares leave out the overlap between the two terms, 3 to 16%.)
+
+About a quarter of the signal was about allergens, and a quarter to a third of the attempts were pushed in a direction that origin alone would not have chosen. That is the case for training on origin alone. The same table shows its cost: without the allergen term, 70% of late groups would have taught nothing.
+
+## What Phase 4 changed in our understanding
+
+- **The task is mostly dish-name recognition.** The title carries almost all of the origin signal, for every model and on both gold sets.
+- **There are three kinds of miss, and each needs something different.** Near misses (the right answer was a close second) are what GRPO fixes. Blind misses (the model does not know the dish) are more than half of the total and need examples, not reward. Undecidable recipes (the text does not contain the answer) need a change to the scoring, not to the model.
+- **GRPO sharpens as much as it teaches.** It converted a third of the near misses, no blind ones, and left the model 98% sure of its answers either way.
+- **Splitting the job is worth a little.** A quarter of the Phase 3 training signal was about allergens, but the clean gain from removing them looks like a few points, and the run will run short of signal sooner.
+- **The method is not missing information.** Leaving it out was the right call.
+- **Fusion is a data problem.** The training set has 29 examples; the model is blind on 22 of the 24 it gets wrong.
+
+## Every weakness we found, and what would change it
+
+| Weakness | Evidence | What would change it |
+|---|---|---|
+| The model does not know the dish | Over half of the misses are blind (64 of 120 after the fine-tune) | More known names: a database, more labelled examples, or a larger model |
+| Fusion | Blind on 22 of 24; 29 training examples | Fusion is composition: two recognised dishes plus the "each there as itself" test |
+| Top-level region wrong | The largest group of misses, 45 to 50 recipes | A mix of unknown names, ownership conventions, and recipes with no single right answer |
+| Depth: stop or go deeper | 35 to 41 misses, and the closest calls | Clearer support rules; partial credit rewards stopping short, and GRPO learned that |
+| Reads the name, not the food | Ingredients alone: 0.38 for the trained 2B, 0.77 for Sonnet | Matters when the title is unhelpful: training without titles, or retrieval |
+| Undecidable recipes | Hummus; not yet counted | Let gold accept more than one answer |
+| Overconfident after GRPO | Typical confidence 98%; the 95 to 99% band is right 52% of the time | Use the fine-tune's confidence, or keep exploration alive during GRPO |
+| Teacher ceiling | Sonnet scores 0.85 to 0.89 against gold | The student learns the teacher's mistakes; review the disagreements |
+| Gold is one person, working from a model's draft | 223 of 224 drafts were kept on the hard set | An independent second labeller on a sample |
+| Small test slices | 13 fusion recipes in gold; run-to-run variance never measured | More fusion gold; repeat a run with another seed |
+| GRPO runs out of signal | 58% of late groups taught nothing | More varied attempts, or larger groups |
+| Model size | Untrained, the 4B is about 0.2 ahead of the 2B | Train the 4B |
+
+## Stepping back: how would we solve this problem?
+
+Not a plan for this project; a design the evidence points to. If the title does most of the work, then most of the knowledge is a list of dish names, and a list does not need to live in model weights.
+
+**Two processes.** A database maps known dish names, with their variants and misspellings, to a taxonomy path. A model decides the cases the database cannot: a name with a modifier, two dishes in one title, a recipe that is badly named. Low-confidence answers go to a person, and corrections go back into the database.
+
+We tested the simplest form with what we had: no model, find the most similar training recipe by title and copy its label (`scripts/lookup_baseline.py`). The 5,774 training recipes stand in for the database.
 
 | | Original 439 | Hard 224 |
 |---|---|---|
-| Phase 3 fine-tune | 0.728 | 0.634 |
-| E, step 80 | 0.739, 66% exact | 0.696, 53% exact |
+| Copy the nearest title's label | 0.541 | 0.512 |
+| Copy the nearest recipe by ingredients | 0.274 | 0.224 |
+| E, the trained 2B, top answer | | 0.688 |
+
+By how close the nearest title is, on the hard set:
+
+| Nearest title | Recipes | Lookup | E |
+|---|---|---|---|
+| Very close | 21 | 0.840 | 0.818 |
+| Close | 47 | 0.657 | 0.638 |
+| Loose | 127 | 0.44 to 0.52 | 0.69 to 0.70 |
+| No real match | 29 | 0.175 | 0.640 |
+
+- **When the name is known, a lookup matches the model,** and it is exact, auditable and editable without retraining.
+- **Coverage is the whole investment.** Only 21 of the 224 hard recipes have a very close title among 5,774. Combining this table with E gains nothing (0.690 against 0.688), because E was trained on the same recipes. A table earns its place only with names the model has not seen.
+- **The table cannot have the last word.** Its wrong close matches were all modifier words: "Chicken Tikka Masala Tacos" matched "Chicken Tikka Masala", and a Filipino "Arroz a la Valenciana" matched the Spanish one. That is the hand-off to the model.
+- **"Most like these" by ingredients is weak as a lookup** (0.22 to 0.27). For badly named recipes the stronger form is to retrieve the similar recipes and give them to the model as context.
+- **Confidence can route review, modestly.** Sending the least confident 20% of the fine-tune's answers to a person catches 38 of its 120 errors; picking at random would catch about 24.
+
+Seen this way, fine-tuning a 2B model to memorise dish names uses weights as the database. The table is the cheaper and more reliable place for that knowledge, and the small model is better spent on what needs judgment: composition, ownership and ambiguity.
+
+# Phase 5 (under consideration; plan written before any run)
+
+Two changes, tested separately so each can be read on its own.
+
+**A. One job.** The model answers origin only; the instructions lose the `contains` rules; the reward is the origin score alone (the same v3 function). Recipes, origin labels, taxonomy and training settings are those of Phase 3's arm E. The code, the data copy and the configs for this exist: the environment has a `mode` setting (`full` by default, so every earlier config runs as before), and `data/dataset_v04_origin/` and `data/sft_v04_origin/` are copies of the Phase 3 files with the `contains` labels left out. No earlier dataset is edited.
+
+**B. The names it is missing.** Because the title does the work, dish names can be taught directly: title-only training examples for the thin regional nodes, and fusion titles built on the dish x dish rule together with seasoning-only counter-examples (a jerk chicken pizza is not fusion). The teacher proposes them and a person checks them before they are used. This part is not designed in detail yet.
+
+**Runs.**
+
+1. Fine-tune 2B on A; fine-tune 2B on A plus B. About 36 minutes each.
+2. Compare the two fine-tunes on the hard set by origin score and by the number of blind misses (64 after the Phase 3 fine-tune).
+3. GRPO from the better one, 160 steps, saving weights every 20 from step 60. Compared with arm E at step 80.
+4. The same at 4B if the 2B result is clear. Untrained, the 4B is about 0.2 ahead of the 2B on origin (with its missing bracket repaired), the largest step between sizes.
+
+**Before any GRPO run:** cap the number of attempts in flight (the memory failure in Phase 3), and log the hard set in training as well as the original gold.
+
+**Numbers to beat (origin, top answer where marked):**
+
+| | Original 439 | Hard 224 |
+|---|---|---|
+| Phase 3 fine-tune | 0.728 | 0.634 sampled, 0.651 top answer |
+| E, GRPO step 80 | 0.739, 66% exact | 0.696 sampled, 0.688 top answer |
 
 **Expectations, written down before the run:**
 
-- **Fine-tune alone:** hard-set origin at or a little above 0.634. A fine-tune only imitates the labels, and the labels have not changed.
-- **GRPO at step 80:** hard-set origin above 0.696. This is where the effect should show, because the whole reward, and so the whole training signal, is now about origin. In arm E a group of eight attempts could be ranked by an allergen slip.
-- **A gain under 0.02 counts as no effect.** One evaluation repeats to about 0.002, but we have never measured how much two training runs differ, and it is certainly more than that.
-- **Risk we expect to see:** more groups where all eight attempts score the same and teach nothing. That share rose from 18% to 38% during arm D with two reward terms; with one term it should be higher. If it passes about half, the next change is a larger group or a higher sampling temperature.
-- **If nothing moves,** the two jobs were not competing at this size, and a single model doing both costs nothing. That is a result too.
+1. **The origin-only fine-tune barely moves** (within 0.02 of 0.651 on the hard set). A fine-tune copies labels and the labels are the same.
+2. **Name examples reduce blind misses.** This is the change we expect the most from: fewer than 64 blind misses on the hard set, with the fusion slice moving for the first time.
+3. **GRPO on origin alone learns faster early,** reaching by step 40 to 60 what arm E reached at step 80, because none of the signal is spent on allergens.
+4. **It then stalls sooner.** With one reward term, more groups have eight identical scores. We expect steps 80 to 160 to add under 0.01.
+5. **It converts near misses and nothing else.** From A alone we expect 0.70 to 0.72 on hard-set origin. Anything above 0.74 would mean it fixed blind misses, which Phase 4 says GRPO cannot do.
+6. **More influences are offered,** right and wrong, as every untrained model did under one-job instructions.
+7. **Confidence becomes as unreliable as it did in arm E.**
+
+A gain under 0.02 counts as no effect: one evaluation repeats to about 0.002, but we have never measured how much two training runs differ.
+
+# Repository
 
 ## Layout
 
@@ -312,7 +470,7 @@ uv run sft @ env/environments/recipe_classify/configs/sft-2b-sonnet.toml --no-mo
 uv run python tools/convert_dcp_to_bf16.py outputs/<run>/checkpoints/step_320      # -> .../step_320/weights
 # GRPO on one GPU with prime-rl (see configs/rl-2b.toml comments for the single-GPU flags):
 CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl-2b.toml --inference.vllm.gpu-memory-utilization 0.45
-# Phase 3 on prime-rl 4c12d15 (flag names changed since day 2; each trainer checkpoint is ~25 GB, hence keep-last):
+# Phase 3 on prime-rl 4c12d15 (flag names changed since Phase 2; each trainer checkpoint is ~25 GB, hence keep-last):
 uv run sft @ env/environments/recipe_classify/configs/sft-2b-v04.toml --no-monitors.prime
 CUDA_VISIBLE_DEVICES=0,0 uv run rl @ env/environments/recipe_classify/configs/rl-2b-v04.toml --deployment.num-train-gpus 1 \
   --deployment.num-infer-gpus 1 --inference.vllm.gpu-memory-utilization 0.45 --trainer.ckpt.keep-last 1 --no-monitors.prime
@@ -330,7 +488,7 @@ The Phase 3 commands run as written only with the full private dataset. With thi
 - **Phase 3** (`data/dataset_v04/`): taxonomy 0.4.0 labels. 4,457 of the 5,774 training recipes and 350 of the 439 gold
   recipes are here. Not here: the 224-recipe hard set and the 700 newly sourced training recipes (scraped from recipe sites,
   not redistributable), and the app captures described below. `data/dataset/`, `dataset_dsv4/` and `dataset_sonnet/` stay as
-  the record of days 1 and 2; their labels use taxonomy 0.3.3 (`Unplaced`), so the environment's default is now `dataset_v04`.
+  the record of Phases 1 and 2; their labels use taxonomy 0.3.3 (`Unplaced`), so the environment's default is now `dataset_v04`.
 - **Raw** recipes: Food.com (CC0) and Wikibooks Cookbook (CC BY-SA 3.0; each record carries its `source` URL). The 89 gold and
   ~460 train recipes captured from the author's own app are excluded from this repository; the private 439-recipe numbers are
   reported alongside the 350-recipe public numbers above.

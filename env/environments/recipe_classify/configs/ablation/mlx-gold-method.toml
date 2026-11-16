@@ -1,0 +1,19 @@
+# INPUT ABLATION (method), gold set, FULL instructions (for the Phase 3 weights), local mlx_lm.server:
+#   bash scripts/vf_run_mlx.sh <model-as-served> 439 4 ablation/mlx-gold-method.toml
+[env.agent.harness]
+id = "null"
+
+[env.agent.runtime]
+type = "subprocess"
+
+[client]
+base_url = "http://127.0.0.1:8080/v1"
+api_key_var = "MLX_API_KEY"
+
+[sampling]
+temperature = 0.7
+max_tokens = 400
+reasoning_effort = "none"   # qwen3.5 thinks by default; thinking lands in `reasoning`, content stays empty, and 400 tokens burn with no <answer>. Disable for the baseline.
+
+[env.taskset]
+dataset_path = "/Users/jasdeep/svml/prime-intellect/data/ablation/gold--method.jsonl"

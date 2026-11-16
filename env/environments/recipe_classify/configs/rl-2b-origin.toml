@@ -1,0 +1,95 @@
+# GRPO on recipe-classify, Qwen3.5-2B, single H200 (trainer + vLLM share GPU 0).
+# Launch from ~/prime-rl on the pod:
+#   uv run rl @ ~/prime-intellect/env/environments/recipe_classify/configs/rl-2b.toml \
+#     --trainer-gpu-ids 0 --inference-gpu-ids 0 --inference.gpu-memory-utilization 0.45
+# ORIGIN-ONLY ARM F (Phase 5 plan): GRPO from the ORIGIN-ONLY SFT (sft-2b-origin). One change against arm E (rl-2b-v04.toml): the model answers origin
+# only, the instructions have no contains section, and the reward is score_origin alone (env.taskset.mode = "origin").
+# Recipes, origin labels, taxonomy, lr, batch, group size, temperature, staleness: identical to arm E.
+# 160 steps instead of 80. COMPARE WITH ARM E AT STEP 80 (single-variable); steps 100-160 answer "what does longer add".
+# The final step is fixed at 160 in advance: the hard set is logged in-loop but NOT used to choose a checkpoint.
+# Launch (prime-rl 4c12d15, one GPU):
+#   CUDA_VISIBLE_DEVICES=0,0 uv run rl @ <this file> --deployment.num-train-gpus 1 --deployment.num-infer-gpus 1 \
+#     --inference.vllm.gpu-memory-utilization 0.45 --trainer.ckpt.keep-last 1 --no-monitors.prime
+# DO NOT LAUNCH until in-flight episodes are capped (TODO below): on 2026-11-16 the dispatcher climbed to ~4,350 concurrent
+# episodes during the trainer's first step; with runtime.type = "subprocess" that is one python process each (~56 MB), 256 GiB
+# against the container's 251 GB limit. Watch RAM through step 1:  watch -n5 'free -g | head -2; pgrep -c python'
+# WEIGHTS: copy broadcast steps 60/80/100/120/140/160 to /workspace/save as they appear (only the last two are kept on disk).
+# DISK: each trainer checkpoint is ~25 GB, hence keep-last 1.
+mode = "rl"
+max_steps = 160
+seq_len = 4608                              # 0.4.0 prompt is ~3.66k tokens (max 3.9k in train) + 400 completion; 4096 no longer leaves room
+
+[model]
+name = "/home/ubuntu/prime-intellect/models/sft-2b-origin"    # symlink -> <origin-only sft run>/checkpoints/step_340/weights (convert_dcp_to_bf16.py output)
+
+[monitors.wandb]
+project = "recipe-classify"
+name = "2b-grpo-origin"
+
+[orchestrator]
+batch_size = 128                            # EPISODES per step (= 16 prompts × group 8). Was 64 = 8 prompts: too noisy a gradient.
+# TODO(before launch): cap concurrent in-flight episodes here; flag name to be read from `uv run rl --help`.
+max_staleness = 2                           # Was default 8. Single-GPU inference runs ~10× ahead of the trainer; stale rollouts drove
+                                            # mismatch-KL 0.002→0.39 and the collapse at step ~35. Keep rollouts near-on-policy.
+
+[orchestrator.train]
+group_size = 8                              # rollouts per prompt; advantage = within-group
+
+[orchestrator.train.sampling]
+max_completion_tokens = 400
+temperature = 1.2                           # arm C converged to one answer per group at T=1.0 (entropy 0.03); flatter sampling keeps groups diverse
+
+[[orchestrator.train.source]]
+name = "recipe-classify-train"
+env.taskset.id = "recipe-classify"
+env.taskset.dataset_path = "/home/ubuntu/prime-intellect/data/dataset_v04_origin/train.jsonl"
+env.taskset.mode = "origin"
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"
+
+# Reward-vs-GOLD every 10 steps (reward = origin in this mode, so the curve is the origin curve).
+[orchestrator.eval]
+interval = 10
+
+[orchestrator.eval.sampling]
+max_completion_tokens = 400
+temperature = 0.7                           # matches vf-run evals so numbers are comparable
+
+[[orchestrator.eval.source]]
+name = "recipe-classify-gold"
+select.limit = 150
+env.taskset.id = "recipe-classify"
+env.taskset.dataset_path = "/home/ubuntu/prime-intellect/data/dataset_v04_origin/eval.jsonl"
+env.taskset.mode = "origin"
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"
+
+# Phase 3 lesson: the gold-150 curve moved 0.868 -> 0.872 while hard-set origin rose 0.634 -> 0.696. Log the hard set too.
+# Descriptive only (see header): no checkpoint is selected on it.
+[[orchestrator.eval.source]]
+name = "recipe-classify-hard"
+env.taskset.id = "recipe-classify"
+env.taskset.dataset_path = "/home/ubuntu/prime-intellect/data/dataset_v04_origin/eval_gold_hard.jsonl"
+env.taskset.mode = "origin"
+env.agent.harness.id = "null"
+env.agent.runtime.type = "subprocess"
+
+[trainer.optim]
+lr = 1e-6                                   # full fine-tune of a 2B; halve if KL runs away
+
+[ckpt]
+interval = 20
+
+[inference]
+
+# Single-GPU: trainer and vLLM share GPU 0, and NCCL refuses a communicator with two ranks on one device
+# ("NCCL error: invalid usage"). Ship weights through the filesystem instead (a few seconds per step for a 2B).
+[weight_broadcast]
+type = "filesystem"
+
+# Explicit, not auto: the renderer's per-model default table has thinking OFF for Qwen3.5-0.8B/2B but ON for 4B+,
+# and ON for any name it doesn't recognise — i.e. every local SFT checkpoint path. Thinking must be off or every
+# rollout spends its 400 tokens inside <think> and the whole group scores 0 (no advantage, no gradient).
+[orchestrator.renderer]
+name = "qwen3.5"
+enable_thinking = false

@@ -103,7 +103,14 @@ def main():
     titles = {i: g.get("title", "") for i, g in {**gold, **hard}.items()}
     old = evaluate("OLD prompt (2026-11-08 origin_eval_sonnet55.jsonl) on the 439, current gold", load(S / "origin_eval_sonnet55.jsonl"), gold)
     new = evaluate("NEW prompt (_goldeval_sonnet_0_4_gold.jsonl) on the 439", load(S / "_goldeval_sonnet_0_4_gold.jsonl"), gold)
-    evaluate("NEW prompt (_goldeval_sonnet_0_4_hard.jsonl) on the 224 hard set", load(S / "_goldeval_sonnet_0_4_hard.jsonl"), hard)
+    newh = evaluate("NEW prompt (_goldeval_sonnet_0_4_hard.jsonl) on the 224 hard set", load(S / "_goldeval_sonnet_0_4_hard.jsonl"), hard)
+    # Phase 5 baseline: the same teacher under the ORIGIN-ONLY instructions (label_origin --prompt-mode origin), if those runs exist
+    for tag, fn, g, full in (("439", "_goldeval_sonnet_p4origin_gold.jsonl", gold, new), ("224 hard set", "_goldeval_sonnet_p4origin_hard.jsonl", hard, newh)):
+        if not (S / fn).exists(): continue
+        oo = evaluate(f"ORIGIN-ONLY prompt ({fn}) on the {tag}", load(S / fn), g)
+        dd = [oo[i]["score"] - full[i]["score"] for i in g if i in oo and i in full]
+        print(f"   origin-only vs full prompt, per recipe on the {tag}: better {sum(x > 1e-9 for x in dd)} · worse {sum(x < -1e-9 for x in dd)} · "
+              f"same {sum(abs(x) <= 1e-9 for x in dd)} · mean change {sum(dd)/max(len(dd),1):+.3f}")
 
     d = sorted(((new[i]["score"] - old[i]["score"], i) for i in gold), key=lambda x: x[0])
     up = sum(1 for x, _ in d if x > 1e-9); down = sum(1 for x, _ in d if x < -1e-9)

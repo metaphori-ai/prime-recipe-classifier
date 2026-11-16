@@ -1,4 +1,4 @@
-"""Regenerate journey-2b.svg (day-2 summary flow). Edit the box() calls, run: python3 scripts/make_journey2b.py"""
+"""Regenerate journey-2b.svg (phase 2 summary flow). Edit the box() calls, run: python3 scripts/make_journey2b.py"""
 from pathlib import Path
 F="-apple-system,Inter,Helvetica,Arial,sans-serif"
 PAL={'gray':('#F1EFE8','#5F5E5A','#2C2C2A','#5F5E5A'),'purple':('#EEEDFE','#534AB7','#26215C','#534AB7'),
@@ -49,7 +49,7 @@ down('C',7)
 box('C',8,'Next','reward v3 · SVML-think · ship','gray',dashed=True)
 H=ROW(8)+BH+30
 svg=(f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" xmlns="http://www.w3.org/2000/svg"><rect width="{W}" height="{H}" fill="#FFFFFF"/>'
- '<title>Recipe-classify journey, day 2 (summary)</title><desc>Label ceiling → teacher bake-off → Sonnet relabel → two SFT stacks → GRPO from SFT → 0.857, with the decisions and traps along the way.</desc>'
+ '<title>Recipe-classify journey, phase 2 (summary)</title><desc>Label ceiling → teacher bake-off → Sonnet relabel → two SFT stacks → GRPO from SFT → 0.857, with the decisions and traps along the way.</desc>'
  '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#888780"/></marker></defs>\n'
  +'\n'.join(out)+'\n</svg>\n')
 Path(__file__).resolve().parent.parent.joinpath('journey-2b.svg').write_text(svg); print(W,H)

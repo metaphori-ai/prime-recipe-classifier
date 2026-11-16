@@ -144,3 +144,24 @@ def test_unplaced_alias_rescoring():
     from recipe_tax.scoring import resolve_path
     tax = Taxonomy.load()
     assert resolve_path(tax, ["Unplaced", "Contemporary"]) == (("Global", "Contemporary"), 1.0)
+
+
+def test_origin_mode():
+    """Phase 5: origin-only answers. Same origin score as full mode; contains neither required nor scored."""
+    tax = Taxonomy.load()
+    def O(prim, *infl): return [{"path": list(prim), "role": "primary"}] + [{"path": list(i), "role": "influence"} for i in infl]
+    AM, JP = ("North American", "American"), ("East Asian", "Japanese")
+    gold_full = {"origin": O(AM, JP), "contains": ["red_meat", "gluten"], "contains_uncertain": []}
+    gold_copy = {"origin": O(AM, JP)}                                     # the Origin-only data copy carries origin only
+    ans = {"origin": O(AM, JP)}
+    assert gate(tax, ans) is not None and gate(tax, ans, "origin") is None   # full mode still demands a contains list
+    assert score(tax, gold_full, ans)["reward"] == 0.0                        # ... so earlier runs are unaffected
+    for g in (gold_full, gold_copy):
+        r = score(tax, g, ans, ["ground beef", "soy sauce"], mode="origin")
+        assert r["reward"] == r["origin"] == 1.0 and r["gate"] is None
+    for pred in (O(AM), O(JP), O(("Global", "Fusion"), AM, JP)):              # reward IS score_origin, nothing else
+        assert score(tax, gold_copy, {"origin": pred}, mode="origin")["reward"] == score_origin(tax, gold_copy["origin"], pred)
+    with_allergens = {"origin": O(AM, JP), "contains": ["peanuts"] * 30, "evidence": {"peanuts": "x"}}
+    assert score(tax, gold_copy, with_allergens, mode="origin")["reward"] == 1.0   # extra keys are ignored, never rewarded
+    assert score(tax, gold_copy, {"contains": []}, mode="origin")["reward"] == 0.0
+    assert score(tax, gold_copy, {"origin": O(AM) + O(JP)}, mode="origin")["gate"]   # two primaries still gate

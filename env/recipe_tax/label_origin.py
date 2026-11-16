@@ -31,12 +31,12 @@ def prime_team() -> str | None:
     """Team to bill: $PRIME_TEAM_ID, else the `prime login` config's team_id. Without it Prime bills the personal balance."""
     return os.environ.get("PRIME_TEAM_ID") or prime_config().get("team_id")
 
-def system_prompt() -> str:
+def system_prompt(mode: str = "full") -> str:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "environments" / "recipe_classify"))
     import importlib, re
     src = (Path(__file__).resolve().parents[1] / "environments" / "recipe_classify" / "recipe_classify" / "taskset.py").read_text()
     ns = {}; exec(re.sub(r"import verifiers\.v1 as vf.*?\n", "", src.split("class RecipeData")[0]), ns)   # reuse without importing verifiers
-    return ns["system_prompt"](Taxonomy.load()), ns["parse_answer"]
+    return ns["system_prompt"](Taxonomy.load(), mode), ns["parse_answer"]
 
 ANTHROPIC_NATIVE = "https://api.anthropic.com/v1/messages"
 
@@ -78,7 +78,7 @@ def call(client, url, key, model, sys_p, user, max_tokens, reasoning, retries=4,
     raise SystemExit(f"retries exhausted (last: {last}) — rerun with --resume")
 
 def cmd_run(a):
-    tax = Taxonomy.load(); sys_p, parse = system_prompt()
+    tax = Taxonomy.load(); sys_p, parse = system_prompt(a.prompt_mode)
     key = os.environ.get(a.api_key_var) if a.api_key_var else prime_key()
     if not key and "pinference" in a.url: sys.exit("no key: `prime login` or set PRIME_API_KEY")
     team = a.team_id or prime_team()
@@ -98,7 +98,7 @@ def cmd_run(a):
                 reply, i, o = call(client, a.url, key or "EMPTY", a.model, sys_p, user, a.max_tokens, a.reasoning, team=team)
                 tin += i; tout += o
                 pred = parse(reply)
-                if pred is None or gate(tax, pred):
+                if pred is None or gate(tax, pred, a.prompt_mode):
                     skipped += 1; out.write(json.dumps({"id": rec["id"], "error": "unparseable_or_no_primary", "reply": reply[-400:], "model": a.model}) + "\n"); out.flush(); n += 1; continue
                 norm, diag = normalize(tax, pred)
                 prim = [x for x in norm["origin"] if x.get("role", "primary") == "primary"]
@@ -142,6 +142,7 @@ def cmd_compare(a):
 def main(argv=None):
     ap = argparse.ArgumentParser(); sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run"); r.add_argument("inputs", nargs="+"); r.add_argument("-m", "--model", required=True); r.add_argument("--out", required=True)
+    r.add_argument("--prompt-mode", default="full", choices=("full", "origin"), help="origin = Phase 5 origin-only instructions")
     r.add_argument("--raw", action="store_true", help="inputs are raw recipe jsonl (build prompts); else dataset jsonl with `prompt`")
     r.add_argument("--url", default=PRIME_URL); r.add_argument("--api-key-var", default=None); r.add_argument("--limit", type=int); r.add_argument("--resume", action="store_true")
     r.add_argument("--team-id", default=None, help="Prime team to bill (default: $PRIME_TEAM_ID or ~/.prime/config.json team_id)"); r.add_argument("--max-tokens", type=int, default=1200); r.add_argument("--reasoning", default=None, help='e.g. "none" | "low" | "medium"')

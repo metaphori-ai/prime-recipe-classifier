@@ -1,0 +1,33 @@
+# SFT on the silver set with prime-rl (full fine-tune, not LoRA), Qwen3.5-2B, one GPU.
+#   uv run sft @ ~/prime-intellect/env/environments/recipe_classify/configs/sft-2b-origin.toml --no-monitors.prime
+# No in-loop eval (keeps the GPU to the trainer); evaluate the checkpoint afterwards with eval-gold.toml.
+# ORIGIN-ONLY (Phase 5 plan): the SAME 5,486 recipes, origin labels and schedule as Phase 3 (sft-2b-v04.toml); the target is
+# {"origin": [...]} alone and the instructions have no contains section. Built by scripts/make_origin_copy.py + sft_prepare --mode origin.
+# Output is a DCP trainer checkpoint, NOT HF weights — prime-rl's SFT trainer never
+# writes HF format itself. Export afterwards (writes config.json + tokenizer + safetensors to checkpoints/step_340/weights):
+#   uv run python tools/convert_dcp_to_bf16.py outputs/<run>/checkpoints/step_340
+#   ln -sfn ~/prime-rl/outputs/<run>/checkpoints/step_340/weights ~/prime-intellect/models/sft-2b-origin
+mode = "sft"
+max_steps = 340                       # 5,486 rows / batch 32 ≈ 171 steps per epoch → ~2 epochs
+
+[ckpt]                                # present with no interval => ONE checkpoint, at the last step (each is ~25 GB;
+                                      # four of them filled a 200 GB disk on 2026-11-16)
+
+[model]
+name = "Qwen/Qwen3.5-2B"
+
+[data]
+name = "/home/ubuntu/prime-intellect/data/sft_v04_origin"        # local dir: train.jsonl + valid.jsonl, `messages` column
+seq_len = 4096
+batch_size = 32
+micro_batch_size = 8                                # default 1 ran at MFU 8% / 15.8 s per step (85 min); 37 GB used of 140
+
+[optim]
+lr = 1e-5                                           # full FT of a 2B; the 0.6B example uses 2e-5
+
+[monitors.wandb]
+project = "recipe-classify"
+name = "2b-sft-origin"
+
+[deployment]
+num_train_gpus = 1

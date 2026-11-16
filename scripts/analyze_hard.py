@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Slice breakdown of saved answers on a gold set (0.4.0 gold, reward v3). Reads vf-run traces.jsonl or prime-rl *.jsonl.zst.
+"""Slice breakdown of saved answers on a gold set (0.4.0 gold, reward v3). Origin-only answers (Phase 5) are scored in origin mode: reward = origin, contains prints 0. Reads vf-run traces.jsonl or prime-rl *.jsonl.zst.
 Usage (project root): PYTHONPATH=env python3 scripts/analyze_hard.py <eval file> name=path [name=path ...]"""
 import io, json, sys, re, glob, statistics, collections
 from pathlib import Path
@@ -47,7 +47,7 @@ def main():
             if not g: continue
             a = []; find(r, lambda d: d.get("role") == "assistant" and "content" in d, a)
             t = a[-1]["content"] if a else ""; p = parse(t if isinstance(t, str) else json.dumps(t))
-            s = scoring.score(tax, g["labels"], p, ingredients=g.get("ingredients"), title=g["prompt"].split("\n", 1)[0].removeprefix("Title:").strip()) if p else {"reward": 0, "origin": 0, "contains": 0}
+            s = scoring.score(tax, g["labels"], p, ingredients=g.get("ingredients"), title=g["prompt"].split("\n", 1)[0].removeprefix("Title:").strip(), mode=("full" if isinstance(p.get("contains"), list) and "contains" in g["labels"] else "origin")) if p else {"reward": 0, "origin": 0, "contains": 0}
             go = g["labels"]["origin"]; po = [o for o in ((p or {}).get("origin") or []) if isinstance(o, dict)]
             gp = [o for o in go if o["role"] == "primary"][0]["path"]
             pp = [("Global" if x == "Unplaced" else x) for x in (next((o.get("path") for o in po if o.get("role", "primary") == "primary"), None) or [])]

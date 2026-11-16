@@ -1,0 +1,20 @@
+# INPUT ABLATION (method), gold set, ORIGIN-ONLY instructions, local Ollama:
+#   bash scripts/vf_run_ollama.sh <tag> 439 2 ablation/ollama-gold-method.toml
+[env.agent.harness]
+id = "null"
+
+[env.agent.runtime]
+type = "subprocess"
+
+[client]
+base_url = "http://localhost:11434/v1"
+api_key_var = "OLLAMA_API_KEY"
+
+[sampling]
+temperature = 0.7
+max_tokens = 400
+reasoning_effort = "none"   # qwen3.5 thinks by default; thinking lands in `reasoning`, content stays empty, and 400 tokens burn with no <answer>. Disable for the baseline.
+
+[env.taskset]
+dataset_path = "/Users/jasdeep/svml/prime-intellect/data/ablation/gold--method.jsonl"
+mode = "origin"

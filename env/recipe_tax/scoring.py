@@ -66,12 +66,17 @@ def normalize(tax: Taxonomy, pred: dict) -> tuple[dict, dict]:
     if not isinstance(ev, dict): ev = {}                      # a string / list here is a malformed answer, not a crash
     return {"origin": origin, "contains": contains, "evidence": ev}, diag
 
-def gate(tax: Taxonomy, pred: dict) -> str | None:
+MODES = ("full", "origin")   # Phase 5: "origin" = the answer is origin only; contains/evidence are neither required nor scored
+
+def gate(tax: Taxonomy, pred: dict, mode: str = "full") -> str | None:
     """None if the prediction is structurally usable, else the reason. Structural only: JSON shape and exactly one primary.
-    Vocabulary (unknown classes, unresolvable paths) is handled by normalize()/scoring, not the gate."""
+    Vocabulary (unknown classes, unresolvable paths) is handled by normalize()/scoring, not the gate.
+    mode="origin": a `contains` list is not required."""
     if not isinstance(pred, dict): return "not an object"
     origin, contains = pred.get("origin"), pred.get("contains")
-    if not isinstance(origin, list) or not isinstance(contains, list): return "origin/contains missing or wrong type"
+    if mode == "origin":
+        if not isinstance(origin, list): return "origin missing or wrong type"
+    elif not isinstance(origin, list) or not isinstance(contains, list): return "origin/contains missing or wrong type"
     prim = [o for o in origin if isinstance(o, dict) and o.get("role", "primary") == "primary"]
     if len(prim) != 1: return f"expected exactly one primary origin, got {len(prim)}"
     for o in origin:
@@ -152,15 +157,22 @@ def score_contains(gold: set[str], pred: list[str] | set[str], uncertain: set[st
     if tp + fn + fp == 0: return 1.0
     return tp / (tp + FN_COST * fn + FP_COST * fp)
 
-def score(tax: Taxonomy, gold: dict, pred: dict, ingredients: list[str] | None = None, title: str | None = None) -> dict:
+def score(tax: Taxonomy, gold: dict, pred: dict, ingredients: list[str] | None = None, title: str | None = None,
+          mode: str = "full") -> dict:
+    """mode="full": reward = 0.55 origin + 0.45 contains. mode="origin" (Phase 5): reward = origin, the SAME score_origin;
+    whatever the answer says about contains is ignored and `contains` is reported as 0.0 (not measured, not a score)."""
+    if mode not in MODES: raise ValueError(f"mode must be one of {MODES}, got {mode!r}")
     empty = {"reward": 0.0, "origin": 0.0, "contains": 0.0, "unsupported": [], "resolved": 0, "unresolved": 0, "unknown_classes": []}
-    why = gate(tax, pred)
+    why = gate(tax, pred, mode)
     if why: return {**empty, "gate": why}
     norm, diag = normalize(tax, pred)
     if not any(o.get("role", "primary") == "primary" for o in norm["origin"]):
         o = 0.0                                               # primary path unresolvable: origin earns nothing, rest still scores
     else:
         o = score_origin(tax, gold["origin"], norm["origin"])
+    if mode == "origin":
+        return {"reward": o, "gate": None, "origin": o, "contains": 0.0, "unsupported": [],
+                "resolved": diag["resolved"], "unresolved": diag["unresolved"], "unknown_classes": []}
     lines = list(ingredients or []) + ([f"Title: {title}"] if title else [])   # the title can name the protein (policy)
     gold_c = set(gold.get("contains") or ())
     unsupported = check_evidence(norm, lines, gold=gold_c, traps=getattr(tax, "traps", {}))

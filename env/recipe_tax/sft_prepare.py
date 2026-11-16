@@ -30,11 +30,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset-dir", default=None, help="dir with train.jsonl (default data/dataset)")
     ap.add_argument("--out-dir", default=None, help="where to write {train,valid}.jsonl (default data/sft)")
+    ap.add_argument("--mode", default="full", choices=("full", "origin"), help="origin = Phase 5: origin-only prompt and target")
     a = ap.parse_args(argv)
     sys.path.insert(0, str(ROOT / "env" / "environments" / "recipe_classify"))
     src = (ROOT / "env" / "environments" / "recipe_classify" / "recipe_classify" / "taskset.py").read_text()
     ns = {}; exec(re.sub(r"import verifiers\.v1 as vf.*?\n", "", src.split("class RecipeData")[0]), ns)
-    tax = Taxonomy.load(); system = ns["system_prompt"](tax)
+    tax = Taxonomy.load(); system = ns["system_prompt"](tax, a.mode)
     ds_dir = Path(a.dataset_dir) if a.dataset_dir else ROOT / "data" / "dataset"
     rows = [json.loads(l) for l in open(ds_dir / "train.jsonl") if l.strip()]
     random.Random(7).shuffle(rows)
@@ -42,6 +43,9 @@ def main(argv=None) -> int:
     def to_chat(r):
         g = r["labels"]
         origin = [{"path": o["path"], "role": o.get("role", "primary")} for o in g["origin"]]
+        if a.mode == "origin":
+            return {"messages": [{"role": "system", "content": system}, {"role": "user", "content": r["prompt"]},
+                                 {"role": "assistant", "content": "<answer>" + json.dumps({"origin": origin}, ensure_ascii=False) + "</answer>"}]}
         ev = {c: e for c in g["contains"] if (e := evidence_for(c, r["ingredients"], tax.traps))}
         ans = {"origin": origin, "contains": g["contains"], "evidence": ev}
         return {"messages": [{"role": "system", "content": system}, {"role": "user", "content": r["prompt"]},
@@ -53,8 +57,8 @@ def main(argv=None) -> int:
             for r in rs: f.write(json.dumps(to_chat(r), ensure_ascii=False) + "\n")
     tot = cov = 0
     for r in splits["train"]:
-        for c in r["labels"]["contains"]: tot += 1; cov += evidence_for(c, r["ingredients"], tax.traps) is not None
-    print(json.dumps({"train": len(splits["train"]), "valid": len(splits["valid"]), "evidence_coverage": round(cov / max(tot, 1), 3),
+        for c in r["labels"].get("contains", []): tot += 1; cov += evidence_for(c, r["ingredients"], tax.traps) is not None
+    print(json.dumps({"mode": a.mode, "train": len(splits["train"]), "valid": len(splits["valid"]), "evidence_coverage": round(cov / max(tot, 1), 3),
                       "system_prompt_tokens≈": len(system) // 4, "out": str(out_dir.resolve())}, indent=1))
     return 0
 
