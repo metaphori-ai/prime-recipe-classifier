@@ -388,7 +388,39 @@ By how close the nearest title is, on the hard set:
 
 Seen this way, fine-tuning a 2B model to memorise dish names uses weights as the database. The table is the cheaper and more reliable place for that knowledge, and the small model is better spent on what needs judgment: composition, ownership and ambiguity.
 
+## Closing Phase 4: the problem can be shaped differently
+
+Three phases improved the inputs to a fixed problem: better labels, a better reward, a better taxonomy. Phase 4 suggests we can reconsider the limit as the shape of the problem itself. We asked one model to go from a recipe (title + ingredients) straight to a taxonomy path and rewarded it for one path per recipe. That trained it to memorise names and to be certain, and it left fusion and ambiguity looking like noise. We can separate the problem in different ways and train for individual parts. 
+
+(None of this has been built or run. This is just open notes on our thinking.)
+
+**A hidden step in the middle: the canonical dish name.**
+
+1. **Recipe to dish.** From the title and ingredients, name the dish. "Grandma's Sunday Chicken" becomes chicken tikka masala. A good title lets this step be skipped; a bad title is where the ingredients have to do the work. This is title -> title matching along with ingredient -> title matching. 
+2. **Dish to taxonomy.** A dish lives in a tradition by definition, so this step is close to a lookup, audited once and reused. We can establish a database/lookup for dish -> taxonomy.
+3. **What a lookup cannot settle.** Fusion, Contemporary and American are not dish names to look up; they are judgments. American and Contemporary turn on ownership and form: has this dish been adapted at an American table, does any tradition own this form at all. Fusion is composition, and by our definition it has to be Dish x Dish: two dishes from different traditions, each still there as itself. It is also the pattern with the least data, 29 training examples. These still need training.
+
+The canonical name is never shown to the user as a label, but it is useful in the app as well: every bibimbap, whatever its author called it.
+
+**What the split buys:**
+
+- **Each part can be tested alone.** Today one score blends recognition and judgment. With the split a miss is either "wrong dish" or "right dish, wrong tradition", and those have different fixes.
+- **Training data for step 1 already exists.** Every recipe with a good title is an ingredients-to-dish example. No new labels are needed.
+- **Ambiguity attaches to the dish, where it belongs.** Step 1 can name hummus with confidence; the table records that hummus has no single owner below a certain level. The question is settled once, not argued again for each recipe.
+- **Fusion gets a cleaner test.** The rule was always about dishes: two of them, each there as itself. In this design fusion is "the recipe resolves to two dish names from different traditions".
+- **Each kind of learning goes where it works.** Recall of names is served by data and a table. Placing a dish is a lookup. What is left for reinforcement learning is judgment: is this two dishes or one dish with a borrowed seasoning, has a cuisine absorbed this dish, does the evidence support going a level deeper. That is a smaller task than the one we trained, and it is the one where a reward can say something a label cannot. The reward can change shape too, for example giving credit for naming both plausible owners of an ambiguous recipe instead of charging the model for not picking one.
+
+**Two risks.** Dish names are an open vocabulary, so step 1 needs a canonical list, and that list is the table again. And errors compound: if step 1 names the wrong dish, step 2 cannot recover. 
+
+**Build the data from the taxonomy outward.** Until now we started from the recipes we had and asked a teacher to label them, which produced 1,700 American recipes and almost nothing under the thin regional nodes. The other direction is to start from each node and collect real dishes and recipes under it, so the taxonomy decides the coverage. The recipes have to be real: a list a model writes from memory carries its mistakes into both the table and the training. The sourced set in Phase 3 was a first version of this, 947 real recipes for 86 nodes.
+
+**An experiment this sets up.** Add one region's dishes at a time. After each, test three things: did that region improve, did the earlier regions hold, and did a region not yet added get easier. That is learning, forgetting and transfer, measured on one stream. Run it twice, once adding the names to the model by training and once adding them to the table with the model frozen. The table cannot forget, so it is the control the weights have to beat. The token probabilities give a finer reading than the score: a dish can be watched moving from blind, to near miss, to correct.
+
+The lesson we take from the project is this one more than any score. The environment is the problem statement, and deciding what the task is, what counts as an answer and what the reward can express is most of the work.
+
 # Phase 5 (under consideration; plan written before any run)
+
+This plan was written before the closing section above, and it keeps the original problem shape: one model, recipe to path. If we run it, it is to finish the comparison with Phase 3, not because it is where we now think the gains are.
 
 Two changes, tested separately so each can be read on its own.
 
